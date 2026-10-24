@@ -64,10 +64,14 @@ FIELD_CATEGORY = (
 )
 
 
-# Screenshot record kinds (free text transcribed by the vision step) -> category. Keywords only;
-# a kind matching several entries stays unresolved.
+# Screenshot record kinds (free text transcribed by the vision step) and catalog descriptions ->
+# category. Keywords only; a text matching several categories stays unresolved. Bare "analytics" is
+# absent on purpose (analytics_* spans analytics, marketing and telemetry records).
 SCREEN_KIND_CATEGORY = (
     ("marketing", "MARKETING_PROFILE"),
+    ("analytics profile", "ANALYTICS_PROFILE"),
+    ("support ticket", "SUPPORT_MESSAGE"),
+    ("conversation", "SUPPORT_MESSAGE"),
     ("attachment", "SUPPORT_ATTACHMENT"),
     ("audit", "SECURITY_AUDIT_LOG"),
     ("tombstone", "ACCOUNT_TOMBSTONE"),
@@ -79,10 +83,14 @@ SCREEN_KIND_CATEGORY = (
 )
 
 
-def _screen_category(obs):
-    kind = (obs.attributes.get("record_kind") or "").lower()
-    found = {category for keyword, category in SCREEN_KIND_CATEGORY if keyword in kind}
+def category_for_text(text):
+    text = (text or "").lower()
+    found = {category for keyword, category in SCREEN_KIND_CATEGORY if keyword in text}
     return found.pop() if len(found) == 1 else None
+
+
+def _screen_category(obs):
+    return category_for_text(obs.attributes.get("record_kind"))
 
 
 def _shape_category(obs):

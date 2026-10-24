@@ -12,11 +12,13 @@ from dataclasses import dataclass, field
 
 from agent.intent import classify
 from agent.llm import Claude
-from core.categories import resolve_category
+from core.categories import category_for_text, resolve_category
 from core.identity import IdentityIndex, link_resources
 from core.resource_state import resource_state
 from ingest.csv_inputs import load_activity, load_identities, load_identity_changes, load_rules
+from core.model import ParseResult
 from ingest.loader import load_store
+from ingest.png_facts import alias_observations
 from planner import order_steps
 from policy import decide, rule_actions
 
@@ -33,6 +35,7 @@ class CaseResult:
     decisions: list = field(default_factory=list)
     unresolved: list = field(default_factory=list)  # (kind, detail)
     notes: list = field(default_factory=list)
+    audit_at: object = None
 
     def export_blockers(self):
         """Reasons this row must not be exported as final output (empty list = exportable)."""
@@ -53,6 +56,8 @@ class Auditor:
         self.claude = claude or Claude(offline=offline)
         self.store = load_store(dataset_dir, claude=self.claude)
         self.activity = load_activity(dataset_dir)
+        for obs in alias_observations(self.store, self.activity, category_for_text):
+            self.store.add(obs.evidence_id, ParseResult(observations=[obs], copy_keys={obs.copy_key}))
         self.index = IdentityIndex(load_identities(dataset_dir), load_identity_changes(dataset_dir))
         self.actions = rule_actions(load_rules(dataset_dir))
         self.classifications = [a for a in self.activity if a.event_type == "CLASSIFY_REQUEST"]
@@ -78,7 +83,7 @@ class Auditor:
         subject = self.index.resolve(request.email)
         if subject is None:
             return CaseResult(request.case_id, "INCOMPLETE", [], unresolved=[("subject", request.email)])
-        links, candidates = link_resources(subject, request, self.store, self.activity)
+        links, candidates, contradicted = link_resources(subject, request, self.store, self.activity)
         decisions, unresolved = [], []
         for (system_id, resource_id), link in sorted(links.items()):
             state = resource_state(self.store, system_id, resource_id, request.audit_at)
@@ -99,5 +104,7 @@ class Auditor:
             steps, status = findings + future, "INCOMPLETE"
         else:
             steps, status = [s for d in decisions for s in d.verification], "COMPLETE"
+        notes = [f"catalog_link_contradicted:{system}/{resource}:{evidence}" for (system, resource), evidence
+                 in sorted(contradicted.items())]
         return CaseResult(request.case_id, status, order_steps(steps), subject, links=links, candidates=candidates,
-                          decisions=decisions, unresolved=unresolved)
+                          decisions=decisions, unresolved=unresolved, notes=notes)

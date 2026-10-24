@@ -20,12 +20,14 @@ RESOURCE_PREFIX_SYSTEM = (
     ("search_", "search_service"),
     ("export_", "export_service"),
     ("backup_", "backup_service"),
+    ("marketing_", "marketing_platform"),
+    ("object_", "object_storage"),
 )
 
 KNOWN_SYSTEMS = frozenset(system for _, system in RESOURCE_PREFIX_SYSTEM)
 
 RESOURCE_ID_RE = re.compile(
-    r"^(?:audit_record|data_flow|legal_hold|tombstone|analytics|account|support|search|export|backup)_\d+$"
+    r"^(?:audit_record|data_flow|legal_hold|tombstone|analytics|account|support|search|export|backup|marketing|object)_\d+$"
 )
 
 

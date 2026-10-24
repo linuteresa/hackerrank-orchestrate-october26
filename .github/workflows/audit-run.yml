@@ -165,9 +165,25 @@ jobs:
           fi
           tail -n 8 ci-artifacts/target_run.txt | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
 
+      # Explicit best-effort mode: every row must still pass schema, ordering, citation and cutoff
+      # validation; unverified rows are classified in export_classes_target.json, not hidden.
+      # --offline: reuses the outputs the target step validated and cached; no model calls.
+      - name: Best-effort export (all rows, classified)
+        id: best_effort
+        if: steps.target.outcome == 'success'
+        run: python code/main.py --offline --best-effort 2>&1 | tee ci-artifacts/best_effort_run.txt
+
       - name: Custom evaluation cases (cached model outputs only)
         if: steps.target.outcome == 'success'
         run: python code/evaluation/custom_cases.py 2>&1 | tee ci-artifacts/custom_cases.txt
+
+      - name: Package code.zip (independent of the export result)
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          mkdir -p ci-artifacts
+          python code/package.py 2>&1 | tee ci-artifacts/package.txt
 
       - name: Verify selected artifacts contain no credentials
         id: scan
@@ -179,13 +195,18 @@ jobs:
           shopt -s nullglob
           files=()
           for f in ci-artifacts/*.json ci-artifacts/*.txt code/eval/provisional_*.csv code/eval/unresolved_*.json \
-                   code/eval/usage_*.json code/cache/intent/*.json code/cache/vision/*.json output.csv; do
+                   code/eval/usage_*.json code/eval/export_classes_*.json code/cache/intent/*.json \
+                   code/cache/vision/*.json output.csv; do
             [ -f "$f" ] && files+=("$f")
           done
           [ "${#files[@]}" -eq 0 ] && { echo "no artifact files to scan"; exit 0; }
           found=0
           if grep -lE 'sk-ant-[A-Za-z0-9_-]{8,}|x-api-key|[Aa]uthorization:' "${files[@]}"; then found=1; fi
           if [ -n "$ANTHROPIC_API_KEY" ] && grep -lF -- "$ANTHROPIC_API_KEY" "${files[@]}"; then found=1; fi
+          if [ -f code.zip ]; then
+            if unzip -p code.zip | grep -qE 'sk-ant-[A-Za-z0-9_-]{20,}'; then echo code.zip; found=1; fi
+            if [ -n "$ANTHROPIC_API_KEY" ] && unzip -p code.zip | grep -qF -- "$ANTHROPIC_API_KEY"; then echo code.zip; found=1; fi
+          fi
           if [ "$found" -ne 0 ]; then
             echo "Credential-like content found in the files listed above; upload skipped."
             exit 1
@@ -224,12 +245,16 @@ jobs:
             ci-artifacts/sample_run.txt
             ci-artifacts/target_run.txt
             ci-artifacts/custom_cases.txt
+            ci-artifacts/best_effort_run.txt
+            ci-artifacts/package.txt
             code/eval/provisional_sample.csv
             code/eval/provisional_target.csv
             code/eval/unresolved_sample.json
             code/eval/unresolved_target.json
             code/eval/usage_sample.json
             code/eval/usage_target.json
+            code/eval/export_classes_target.json
             code/cache/intent/*.json
             code/cache/vision/*.json
             output.csv
+            code.zip

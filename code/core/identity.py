@@ -11,6 +11,10 @@ Every resource-to-person link records *why* it was made (``Link.reasons``). Link
 * ``vision``      - as ``identifier``, but the observation comes from a screenshot extraction
                     (shape-validated in code).
 
+A ``catalog``-only link is a claim about someone else's record. It is dropped (and reported as
+contradicted) when an eligible observation of that record displays strong identifiers and none of
+them is the subject's: the record visibly belongs to another person, known or not.
+
 Uncertain *candidates* are kept apart from confirmed links and never produce steps:
 
 * ``activity_window`` - a deletion-worker activity targets the resource inside the request window
@@ -134,8 +138,21 @@ def discoverable(obs, audit_at):
     return obs.captured_at <= audit_at and obs.observed_at <= audit_at
 
 
+def contradicting_evidence(subject, store, system_id, resource_id, audit_at):
+    """Evidence id of an eligible observation showing only other people's strong identifiers."""
+    for obs in store.observations_for(system_id, resource_id, audit_at):
+        shown = [(kind, value) for kind in STRONG_KINDS for value in obs.identifiers.get(kind, ())]
+        if shown and not any(subject.matches(kind, value) for kind, value in shown):
+            return obs.evidence_id
+    return None
+
+
 def link_resources(subject, request, store, activity):
-    """Return ``(links, candidates)``: confirmed links and uncertain timing candidates."""
+    """Return ``(links, candidates, contradicted)``.
+
+    ``contradicted`` maps catalog-only links that the record's own content refutes to the evidence
+    id showing it; those resources are not linked.
+    """
     audit_at = request.audit_at
     links = {}
 
@@ -164,6 +181,14 @@ def link_resources(subject, request, store, activity):
         if emails & subject.strong["email"] or users & subject.strong["user_id"]:
             add(claim.target_system, claim.resource_id, ("catalog", claim.activity_id, "details", claim.details[:80]))
 
+    contradicted = {}
+    for key, link in list(links.items()):
+        if link.kinds == {"catalog"}:
+            evidence = contradicting_evidence(subject, store, key[0], key[1], audit_at)
+            if evidence:
+                contradicted[key] = evidence
+                del links[key]
+
     candidates = {}
     for claim in activity:
         if (claim.source_system == "deletion_worker"
@@ -172,4 +197,4 @@ def link_resources(subject, request, store, activity):
             candidates.setdefault((claim.target_system, claim.resource_id), Link(claim.target_system, claim.resource_id))
             candidates[(claim.target_system, claim.resource_id)].reasons.append(
                 ("activity_window", claim.activity_id, claim.event_type, claim.reported_result))
-    return links, candidates
+    return links, candidates, contradicted
