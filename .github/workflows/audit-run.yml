@@ -22,7 +22,7 @@ on:
         type: boolean
         default: true
       dump_cache:
-        description: "Print the scanned model-output cache to the log as checksummed base64 (for environments that cannot download artifacts)"
+        description: "Print the cached screenshot extractions to the log (for environments that cannot download artifacts)"
         type: boolean
         default: false
 
@@ -192,15 +192,18 @@ jobs:
           fi
           echo "Scanned ${#files[@]} files: no credential-like content."
 
-      - name: Print model-output cache to the log (opt-in)
+      - name: Print screenshot extractions to the log (opt-in)
         if: inputs.dump_cache && steps.scan.outcome == 'success'
         run: |
-          # Model outputs and usage metadata only; the files were credential-scanned in the step above.
-          tar -C code --sort=name --owner=0 --group=0 --numeric-owner --mtime='2026-01-01 00:00Z' \
-              -czf "$RUNNER_TEMP/model-cache.tgz" cache
-          echo "MODEL-CACHE-SHA256 $(sha256sum "$RUNNER_TEMP/model-cache.tgz" | cut -d' ' -f1)"
-          base64 -w 4000 "$RUNNER_TEMP/model-cache.tgz" | sed 's/^/MODEL-CACHE-B64 /'
-          echo "MODEL-CACHE-END"
+          # Model outputs only (credential-scanned above): one compact JSON line per cached screenshot.
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for path in sorted(Path("code/cache/vision").glob("*.json")):
+              entry = json.loads(path.read_text())
+              keep = {k: entry.get(k) for k in ("prompt_version", "input_digest", "model")}
+              print("VISION", json.dumps(keep | {"output": entry.get("output")}, sort_keys=True, ensure_ascii=False))
+          PY
 
       - name: Save model-output cache
         if: always() && steps.scan.outcome == 'success'
