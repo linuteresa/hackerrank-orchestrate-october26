@@ -31,8 +31,10 @@ export ANTHROPIC_API_KEY=...                       # read from the environment o
 python3 code/main.py --sample      # audit + evaluate the 32 labelled samples
 python3 code/main.py               # audit the 518 requests; writes ./output.csv only if every row passes the export gate
 python3 code/main.py --offline     # never call the model; use cached outputs in code/cache/ only
+python3 code/main.py --best-effort # export all 518 rows; unverified rows are classified, not hidden
 python3 code/evaluation/custom_cases.py          # participant-created evaluation cases (cached outputs)
-python3 -m unittest discover -s code/tests -t code   # offline unit tests, no credentials needed
+python3 -m unittest discover -s code/tests -t code   # offline, hermetic unit tests, no credentials
+python3 code/package.py            # build a deterministic, credential-scanned code.zip
 ```
 
 Every run writes provisional results and reports to `code/eval/` (`provisional_*.csv`,
@@ -40,9 +42,19 @@ Every run writes provisional results and reports to `code/eval/` (`provisional_*
 the export gate: an unresolved intent or subject, a COMPLETE row without cited proof, or a contract
 violation. Exit code 2 means the export was refused; the reasons are listed in `unresolved_target.json`.
 
+`--best-effort` writes `output.csv` with every row, but only if every row still passes the mandatory
+contract validation (schema, ordering, citation and cutoff checks); it adds no step and only removes
+uncited checks from COMPLETE rows. Each row's class (`verified`, `verified_with_unresolved`,
+`best_effort`) and the assumptions behind it are written to `code/eval/export_classes_target.json`
+and summarized in `code/evaluation/evaluation_report.md`. A best-effort COMPLETE row is **not** a
+verified deletion.
+
 **CI:** the manually triggered GitHub Actions workflow "Deletion audit run"
-(`.github/workflows/audit-run.yml`) runs the unit tests, a live smoke test, the sample and target audits
-and the custom cases, with the key taken from the `ANTHROPIC_API_KEY` repository secret.
+(`.github/workflows/audit-run.yml`) runs the unit tests, a live smoke test, the sample and target audits,
+the best-effort export, the custom cases and `code.zip` packaging, with the key taken from the
+`ANTHROPIC_API_KEY` repository secret. Validated model outputs are kept in the Actions cache, so
+unchanged inputs are never paid for twice; the `dump_cache` input prints every cache entry to the job
+log for environments that cannot download artifacts.
 
 **Layout:** `code/ingest/` (one parser per evidence format), `code/core/` (identity, categories,
 per-copy resource state), `code/policy.py` and `code/planner.py` (rules → ordered steps),

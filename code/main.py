@@ -56,7 +56,7 @@ ASSUMPTIONS = {
     "complete_without_account_verification": "no account record of the subject appears in evidence captured "
                                               "by audit_at; account deletion is assumed, not verified",
     "complete_without_steps": "no evidenced resource is left to verify; COMPLETE carries no verification step",
-    "complete_with_unresolved": "a linked resource's category or state is unresolved; it is omitted from the plan",
+    "complete_with_unresolved": "a linked resource's category or state is unresolved; COMPLETE does not cover it",
     "complete_with_uncited_step": "verification steps without citable evidence were removed",
 }
 
@@ -115,7 +115,7 @@ def best_effort(rows, results, blockers, auditor):
         if not reasons:
             out.append((case_id, status, steps_json))
             classes[case_id] = {"class": "verified_with_unresolved" if omitted else "verified", "status": status,
-                                "assumptions": [f"unresolved and omitted: {d}" for d in omitted]}
+                                "assumptions": [f"unresolved, no finding reported: {d}" for d in omitted]}
             continue
         hard = sorted({r for r in reasons if r.startswith("unresolved:")})
         if hard:
@@ -135,7 +135,7 @@ def best_effort(rows, results, blockers, auditor):
         if removed and "complete_with_uncited_step" not in kinds:
             kinds.append("complete_with_uncited_step")
         assumptions = [ASSUMPTIONS[k] for k in kinds if k in ASSUMPTIONS]
-        assumptions += [f"unresolved and omitted: {d}" for d in omitted]
+        assumptions += [f"unresolved, no finding reported: {d}" for d in omitted]
         assumptions += [f"removed uncited step: {r}" for r in removed]
         out.append((case_id, status, steps_json))
         classes[case_id] = {"class": "best_effort", "status": status, "blockers": sorted(set(reasons)),

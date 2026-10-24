@@ -20,7 +20,12 @@ from validate import validate_row
 
 @functools.lru_cache(maxsize=1)
 def auditor():
-    return Auditor(DATASET, offline=True)
+    # Hermetic: an empty cache directory, so results never depend on locally cached model outputs.
+    import tempfile
+
+    from agent.llm import Claude
+
+    return Auditor(DATASET, claude=Claude(offline=True, cache_dir=tempfile.mkdtemp(prefix="no-model-cache-")))
 
 
 @functools.lru_cache(maxsize=1)

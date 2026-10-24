@@ -213,6 +213,67 @@ Options, smallest first:
    category or state, emit no step (as the labels do for `case_07` `object_19`) instead of an
    unresolved decision. Unblocks case_50, 53, 61, 63 (with option 2); case_39, 46, 55 stay blocked.
 
+Update (Lead Architect, 2026-10-24): screenshot integration first, before dropping unresolved
+resources (ADR-017); best-effort export as an explicit, classified mode (ADR-018). After ADR-017 the
+strict gate blocks 111 rows (run #8): 110 account-proof guard, case_46 `tombstone_17` and case_55
+`backup_9287` unresolved by design, case_63 guard only.
+
+## ADR-017 — Screenshot integration (IMPLEMENTED)
+
+- Kind keywords: "analytics profile" → ANALYTICS_PROFILE; "support ticket", "conversation" →
+  SUPPORT_MESSAGE. Transcribed screen kinds are a separate category level below structured event and
+  field shapes (a "support ticket" label no longer conflicts with a structured attachment scan of the
+  same record, `case_34`).
+- Control fields: `field:<label>` values are kept verbatim; a closed vocabulary (mode / sync mode /
+  status / state for connectors; restore allowed / restore block for backups) is normalized into the
+  attributes the flow and restore readers already consume (`enabled`, `restore_allowed`). Health,
+  encryption, checksum, drill and retention labels are never read as control state; conflicting
+  values give nothing.
+- `RESOURCE_ID_RE` and the prefix map include `marketing_` (marketing_platform) and `object_`
+  (object_storage).
+- Catalog alias join: a `LINK_RESOURCE_IDENTITY` claim "X (alias)" joins a screenshot row whose record
+  id equals the alias exactly, only within the claim's own system (the screenshot's manifest origin)
+  and only when exactly one such row exists; captured time is the later of screen and claim. The
+  same-named `delivery_confirmation_19.pdf` attachment of another person (`support_3802`, support
+  platform) is outside that system and never joined.
+- Contradicted catalog claims: a catalog-only link is dropped, and reported as
+  `catalog_link_contradicted`, when an eligible observation of that record shows strong identifiers of
+  which none is the subject's (`marketing_001`: the screen shows Soo-jin Park's email and phone; the
+  claim names the requester). Ownership is never assigned from the claim alone over the record.
+- Measured (run #8): case_39, 50, 53, 61 resolved with cited findings; case_63's link refused;
+  samples status 0.969, P 0.975, R 0.803, exact 0.25 (4 extra steps, see ADR-019).
+
+## ADR-018 — Best-effort export, packaging, cache rebuild (IMPLEMENTED)
+
+- `main.py --best-effort` exports every row only if every row passes `validate_row` (schema,
+  ordering, citations, cutoffs). It never adds a step; the only change is removing uncited checks from
+  COMPLETE rows. Rows with an unresolved intent or subject fail the export (exit 3). Each row is
+  classified (`verified`, `verified_with_unresolved`, `best_effort`) with explicit assumptions in
+  `code/eval/export_classes_<name>.json` and the run log. Strict mode is unchanged and remains the
+  default.
+- `code/package.py` builds a deterministic `code.zip` (README.md + code/, no caches, scratch outputs,
+  nested archives or env files), requires both evaluation reports, and refuses on credential-like
+  values or the key value. CI packages it in every run, independent of the export result.
+- The development container cannot download artifacts. On request (`dump_cache`) CI prints every
+  cache entry to the job log; entries are rebuilt locally only after checking purpose, model, keys and
+  that the file name equals the digest of their own model, purpose, prompt version and input digest
+  (409 entries, 0 rejected). Local offline runs reproduce run #8 exactly.
+
+## ADR-019 — Request-lifecycle lower bound for state evidence (PROPOSED, not implemented)
+
+- Observation: every evidence id cited in the labelled samples (41 findings, 34 verifications) was
+  captured after the request's `reported_at`; none before `requested_at`. A capture made before the
+  request cannot show the state after the requested deletion. The current code already applies this
+  idea to lookups (P2-2) but not to state evidence.
+- Current effect: two pre-request screenshots now drive steps the labels do not contain
+  (`case_07` `object_19` from 13 Feb for a 31 Aug request; `case_17` `tombstone_17` from 10 Mar for a
+  19 Aug request).
+- Measured experiment (state evidence must be captured at or after `requested_at`): samples P 1.0,
+  exact 0.281 (both extras removed, recall unchanged); targets 112 rows blocked (vs 111) and 2 contract
+  violations (vs 1), because some currently cited states lose their only evidence.
+- Decision needed: adopt (lifecycle bound on state evidence, linking unchanged) or keep the current
+  rule (any capture at or before `audit_at`).
+
 ---
 
 ## Hypotheses (unresolved)

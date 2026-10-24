@@ -2,16 +2,18 @@
 
 ## Status of the final run
 
-The full-dataset run below audited all 518 requests and validated every row, but the export gate
-refused to write `output.csv` because 115 rows are blocked (see `evaluation_report.md`). The usage
-figures are therefore for the latest complete full-dataset run, not for a submitted `output.csv`.
-Reported from the job logs of GitHub Actions workflow "Deletion audit run" runs #3 and #4.
+The latest full-dataset run (run #8, id 40115185798, commit `dbfac7f`) audited all 518 requests. The
+strict gate refused `output.csv` (111 rows blocked); the explicit best-effort mode wrote all 518 rows
+with every unverified row classified (see `evaluation_report.md`). Both used exactly the model outputs
+below. Reported from the job logs of GitHub Actions workflow "Deletion audit run".
 
 - Run #3 (id 40111949889, commit `a6c63f8`): every model output was produced live in that run (the
   sample step produced the 32 sample intents and 11 screenshot extractions; the target step reused
   them and produced the rest).
-- Run #4 (id 40113277715, commit `72832f6`): the same 518 requests replayed entirely from the
-  model-output cache: **0 live calls, $0.00**, identical results.
+- Runs #4–#8 (ids 40113277715, 40114240828, 40114423852, 40115000719, 40115185798): the same model
+  outputs replayed entirely from the Actions cache: **0 live calls, $0.00**. Code changes between
+  these runs (screenshot integration, best-effort export) changed only deterministic code, never a
+  model input, so no output had to be recomputed.
 
 ## Models
 
@@ -56,7 +58,7 @@ spent is in the next table (the target step of run #3 made 366 live calls).
 | #1 (id 40110065932) | key rejected by the API | 0 | $0.0000 |
 | #2 (id 40110467404) | smoke + samples + targets, intent prompt v1 (superseded) | 409 | $2.1549 |
 | #3 (id 40111949889) | smoke + samples + targets, intent prompt v2 | 409 | $2.3834 |
-| #4 (id 40113277715) | none (cache replay) | 0 | $0.0000 |
+| #4–#8 | none (cache replays) | 0 | $0.0000 |
 | **Total** | | **818** | **$4.5383** |
 
 Run #2's live cost is the sum of its smoke ($0.0408), sample ($0.5372) and target ($1.5769) steps;
