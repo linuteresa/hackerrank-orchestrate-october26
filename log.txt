@@ -351,3 +351,50 @@ repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+## [2026-10-24T15:05:11Z] GO STEP 1: Phase 1 ingestion parsers, store and tests implemented
+
+User Prompt (verbatim, secrets redacted):
+GO STEP 1.
+
+I approve the revised ingestion design:
+- Separate observations per evidenced physical copy.
+- Preserve NOT_LISTED, UNKNOWN and CONFLICT internally.
+- Use snapshot observation time separately from row last_modified_at, with inclusive audit cutoffs.
+- Use pypdf.
+- Implement the proposed 32-test plan.
+
+Make these two corrections in the documentation while implementing:
+
+1. Snapshot size alone does not prove subject filtering. Describe selection/filter scope as unknown unless the evidence explicitly establishes it.
+
+2. The later successful read in evidence_94 does not prove audit_record_2016 existed at the earlier evidence_52 snapshot. Keep the counterexample framed around insufficient coverage evidence and unsupported absence inference, rather than claiming historical presence was established.
+
+Keep H-2b, H-2d and H-COV explicitly unresolved. Ingestion should preserve the facts and provenance needed to evaluate them in Phase 2. NOT_LISTED must not automatically become ABSENT.
+
+Proceed with the agreed Phase 1 parsers, observation/coverage store and tests. Use constructed fixtures where the supplied data lacks the required edge case.
+
+When finished, report:
+- Files changed.
+- Test commands and actual pass/fail counts.
+- Any unsupported formats, dropped records or parsing ambiguities.
+- Remaining assumptions and blockers for Phase 2.
+
+Update PLAN.md, DECISIONS.md and log.txt, then stop for my review before Phase 2.
+
+Agent Response Summary:
+Implemented Phase 1: typed model, per-copy evidence store (inclusive cutoff, NOT_LISTED/UNKNOWN/CONFLICT, strict vs h2d copy identity), and parsers for SQL (sqlite3), six log dialects with strict trace joins, JSON (bundles, captures, lookup exports, ledgers), handover text, PDFs (pypdf with split-time rejoin) and CSV inputs. 62 unittest cases pass covering all 32 plan IDs plus extras; ingestion is deterministic (2,896 observations, 199 coverage records, 572 trace joins, 0 unparsed log lines). Found and flagged two real facts recorded after their file's capture time (evidence_13, evidence_36), correcting an earlier claim; replaced the shared-stem join requirement with an explicit tested start/terminal allow-list. Applied both requested documentation corrections; H-2b, H-2d, H-COV (and new H-TIME) remain unresolved.
+
+Actions:
+* Created code/core/{model,vocab,timeutil,store}.py, code/ingest/{manifest,sql_snapshots,logs,json_records,text_records,pdf_documents,csv_inputs,loader}.py, code/tests/{helpers,test_sql_snapshots,test_json_records,test_logs,test_text_pdf,test_store_time,test_csv_inputs}.py, code/requirements.txt, .gitignore
+* Ran: python3 -m unittest discover -s code/tests -t code  -> Ran 62 tests, OK
+* Updated code/docs/PLAN.md and code/docs/DECISIONS.md
+* Appended this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+

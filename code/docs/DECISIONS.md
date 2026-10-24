@@ -33,7 +33,7 @@ evidence and the Lead Architect accept them.
 
 ## ADR-003 — Timestamp semantics
 
-- Status: **PROPOSED (revision requested by Lead Architect, 2026-10-24)**
+- Status: **ACCEPTED** (Lead Architect, `GO STEP 1`, 2026-10-24)
 - Decision: `observed_at` (time the source asserts the state) governs selection; SQL row
   `updated_at` is `last_modified_at` (attribute only); bundle records use their own snapshot's
   `captured_at`; logs use the outcome line time; ledgers/service exports use per-row times.
@@ -42,12 +42,17 @@ evidence and the Lead Architect accept them.
   Bundles mix snapshot times (`evidence_02`: 09-09 … 09-17). Row `updated_at` precedes capture by
   0–3 h in all 888 SQL rows. No resource appears in more than one SQL file, so the
   "later snapshot with older `updated_at`" case is tested synthetically.
+- Correction (Phase 1 implementation): two ledger facts are recorded *after* their file's capture
+  time (`evidence_13` `account_1417` 08-14 vs capture 08-12; `evidence_36` `account_5043` 04-11 vs
+  capture 04-09). An earlier statement that every post-capture timestamp was `retention_until` /
+  `expires_at` was wrong for these two. They are kept, flagged `observed_after_capture`, and
+  excluded at the coinciding cutoffs (`case_135`, `case_383`) by the fact-level gate. Open: H-TIME.
 - Real boundary case: `case_86` (`audit_at` 2026-09-06T07:00:00Z) — `evidence_08` captured at
   exactly that instant holds `account_8473` FOUND (08-31) then NOT_FOUND (09-06T07:00:00Z).
 
 ## ADR-004 — PDF extraction dependency
 
-- Status: **PROPOSED**
+- Status: **ACCEPTED** (Lead Architect, `GO STEP 1`, 2026-10-24). Pinned `pypdf==6.17.0` in `code/requirements.txt`.
 - Decision: `pypdf` (pure Python, cross-platform). Alternative `pdftotext` (poppler binary) gives
   better layout but is not available on stock Windows.
 - Evidence: all 4 PDFs are ReportLab-generated with extractable text; pypdf 6.17.0, pdfminer and
@@ -65,25 +70,54 @@ evidence and the Lead Architect accept them.
 |---|---|---|---|
 | H-2b | A logical API lookup can update a physical copy when a mapping is established (`pool=`, `route=` in the same trace) | **Unresolved** | Logs carry `pool=<system>_primary` / `<system>_replica` (e.g. 20/25 account pools) and `route=primary` after retries; `replica` pools do not name *which* replica |
 | H-2c | A generic table covers every `(system, collection)` seen in any copy table of the same file | **NOT APPROVED → WITHDRAWN** | Counterexample below |
-| H-2d | The same table name in different snapshot files is the same physical copy | **Unresolved** | Needed for supersession; untested |
-| H-COV | `NOT_LISTED` under C1/C2/C3 is admissible proof of absence | **Unresolved (Phase 2)** | Samples `case_01/02/04` (C2, `evidence_54`) and `case_31` (C1, `evidence_51`) cite omission as ABSENT; all snapshots are subject-filtered extracts |
+| H-2d | The same table name in different snapshot files is the same physical copy | **Unresolved** | Needed for supersession. Store default is `strict` (copies scoped per evidence file); `identity="h2d"` mode exists for Phase 2 evaluation (STORE-3 shows the two modes diverge) |
+| H-COV | `NOT_LISTED` under C1/C2/C3 is admissible proof of absence | **Unresolved (Phase 2)** | Samples `case_01/02/04` (C2, `evidence_54`) and `case_31` (C1, `evidence_51`) cite omission as ABSENT. No evidence declares any snapshot's selection scope; snapshot size alone does not establish filtering, so `filter_scope` is recorded as unknown |
+| H-TIME | Facts recorded after their own file's capture time may be used once `audit_at >= observed_at` | **Unresolved** | 2 real instances (`evidence_13`, `evidence_36`); both sit at case cutoffs where the fact-level gate excludes them |
 
-### H-2c counterexample (2026-10-24)
+### H-2c counterexample (2026-10-24; framing corrected at `GO STEP 1`)
+
+The counterexample shows that H-2c's absence inference is **unsupported by coverage evidence**; it
+does not establish that the record existed at the earlier snapshot.
 
 `evidence_52` (`customer_data_failover_replica_20260920.sql`, captured 2026-09-20T12:00Z) has
-generic tables with 8 `security_audit_events` + 8 `deleted_customer_references` rows per copy.
-H-2c would declare both copies to cover `security_service/security_audit_events`.
-`audit_record_2016` (subject `user_43` = `l.fontaine46@yahoo.com`) is not in either table, so H-2c
-infers ABSENT in primary and failover at 09-20. But `evidence_94` (captured 09-26T10:38:56Z) shows
-`audit_record_read_completed resource_id=audit_record_2016 rows=1 retention_until=2034-09-30`, no
-activity row mentions `audit_record_2016`, and sample `case_03` (`audit_at` 09-26T11:00Z) requires
-`VERIFY_RECORD_PRESENT security_service audit_record_2016 evidence_94`. With per-copy selection and
-H-2b unresolved, the logical 09-26 read cannot overwrite the physical copies, so H-2c would report
-a retention-required record as missing. Same pattern: `audit_record_1738` present in `evidence_93`
-(09-16) and absent from `evidence_52` with no deletion activity.
+generic tables holding 8 `security_audit_events` and 8 `deleted_customer_references` rows per copy.
+Nothing in the file declares that either copy table enumerates the whole collection, or how its
+rows were selected. H-2c would nevertheless treat both copies as covering
+`security_service/security_audit_events` and infer `audit_record_2016` (subject `user_43`)
+ABSENT from both at 09-20 purely from omission.
+
+Why that inference is unsafe:
+- The omission has no declared coverage behind it, so it supports no conclusion about
+  `audit_record_2016` at 09-20 — neither absent nor present.
+- No activity row mentions `audit_record_2016`, so there is also no claimed deletion to corroborate.
+- Sample `case_03` (`audit_at` 09-26T11:00Z) requires `VERIFY_RECORD_PRESENT security_service
+  audit_record_2016 evidence_94`, citing a logical read on 09-26 (`rows=1`). That later read does not
+  prove presence at 09-20. But with H-2b unresolved it also cannot overwrite a physical-copy state,
+  so an unsupported ABSENT inferred from `evidence_52` would persist and contradict the required
+  verification of a retention-required record.
+
+The same unsupported inference would apply to `audit_record_1738` (listed in `evidence_93` at 09-16,
+omitted from `evidence_52`). Result: H-2c withdrawn; generic tables produce no coverage, and the
+affected copies are `UNKNOWN` (regression test SQL-3).
 
 ## Experiment log
 
 | ID | Hypothesis | Change | Before | After | Keep/Revert |
 |---|---|---|---|---|---|
-| — | — | — | — | — | — |
+| P1-1 | Shared-stem start/terminal pairing is sufficient for joins | Replaced by explicit `TERMINALS` allow-list (same stem still allowed) | stem-only: `message_scan_started`→`message_pii_scan` etc. unjoinable | 572 joins, 0 ambiguous, 0 orphan outcomes on supplied logs | Keep (tested by LOG-3, LOG-8e) |
+| P1-2 | `lookup_key=null` starts are ambiguous traces | Counted as `null_lookup`, no link, no issue | 36 false "ambiguous" issues (30 null + 6 `owner_key` not yet recognised) | 0 ambiguous; `owner_key` added as lookup field | Keep |
+| P1-3 | Every in-file timestamp after capture is a semantic date | Store flags `observed_after_capture` | assumption untested | 2 real violations found and flagged (TIME-3) | Keep flagging; usage open (H-TIME) |
+
+## Phase 1 decision record (2026-10-24)
+
+Lead Architect `GO STEP 1` approved: separate observations per evidenced physical copy; internal
+`NOT_LISTED` / `UNKNOWN` / `CONFLICT`; snapshot observation time separate from row
+`last_modified_at`; inclusive cutoffs; pypdf; the 32-test plan. Documentation corrections required
+and applied: (1) selection/filter scope is unknown unless evidence establishes it — snapshot size
+does not prove filtering; (2) the H-2c counterexample is framed as insufficient coverage evidence
+and unsupported absence inference, not as proof of historical presence. H-2b, H-2d and H-COV stay
+unresolved; ingestion preserves `copy_key`, `read_path`, `evidence_scope`, coverage basis and
+`filter_scope` so Phase 2 can evaluate them. `NOT_LISTED` is never converted to `ABSENT`.
+
+Measured: 62 unittest cases pass (`python3 -m unittest discover -s code/tests -t code`), covering
+all 32 plan IDs plus TIME-1b, an UNKNOWN-state check and CSV-1.

@@ -1,6 +1,7 @@
 # PLAN — Ghost Data Still Exists deletion-audit agent
 
-Status: **Phase 1 design checkpoint — revision 2 (2026-10-24).** ADR-002 core accepted; H-2c not approved; awaiting `GO STEP 1`. No implementation code exists yet.
+Status: **Phase 1 implemented (2026-10-24, `GO STEP 1`)** — ingestion parsers, observation/coverage store and tests;
+62 unittest cases pass. Awaiting Lead Architect review before any Phase 2 work. H-2b, H-2d and H-COV remain unresolved.
 Owner of decisions: Lead Architect (user). Implementation partner: Claude Code.
 Companion file: `code/docs/DECISIONS.md` (ADRs and measured experiments).
 
@@ -87,14 +88,15 @@ enumerated a collection. Basis grades:
 | `C3_SCOPE_TABLE` | SQL `snapshot_scope(origin_system, captured_at)` + typed category tables | from table, system from scope | unresolved (`inventory`) |
 | *(none)* | Generic `record_json` tables; logs; lookup ledgers; service lookup exports; text; PDF | — | — |
 
-Every Coverage record carries `filter = "unknown"`: no evidence file declares *how* rows were
-selected, and row counts (3–89 rows vs 850 users) show all snapshots are subject-filtered extracts.
+Every Coverage record carries `filter_scope = "unknown"`: no evidence file declares how rows were
+selected. Snapshot size alone (3–89 rows against 850 users) does not establish that a snapshot is
+filtered, nor what it would be filtered by; selection scope stays unknown unless evidence states it.
 
 Omission from a covered enumeration yields `NOT_LISTED(basis, evidence_id)`, never `ABSENT`.
 Whether a `NOT_LISTED` fact is admissible proof of absence for a given basis is a **Phase 2
 policy decision**, measured against samples (e.g. `case_01` relies on C2, `case_31` on C1).
 
-Generic `record_json` tables produce *collection sightings* only (informational, no coverage).
+Generic `record_json` tables produce observations only, no coverage.
 `evidence_05` still yields `account_994` PRESENT in the read replica, so sample `case_16` does not
 depend on any coverage inference for the primary.
 
@@ -123,6 +125,9 @@ For cutoff `audit_at`, for each `(system_id, resource_id, copy_key)`:
 - Each table → one `copy_key`; each row → one `Observation` with `observed_at` = snapshot time,
   `last_modified_at` = row `updated_at`. Tables never merge.
 - C2 coverage for typed copy tables; C3 for scope-declared inventory tables; none for generic tables.
+- Store identity: by default (`strict`) a snapshot copy is scoped to its evidence file, so the same
+  table name in two files is not assumed to be one copy (H-2d unresolved); `identity="h2d"` groups by
+  `CopyKey` alone so H-2d can be evaluated in Phase 2.
 
 ### 5.2 Logs (26 files, ≥6 dialects) — strict trace joins (ACCEPTED)
 
@@ -131,10 +136,17 @@ For cutoff `audit_at`, for each `(system_id, resource_id, copy_key)`:
   `LogEvent(file, line_no, ts, service, trace_id, event, fields)`.
 - Group key `(evidence_id, trace_id)`; never across files (measured: 0 ids span files).
 - A join is accepted only when the group has exactly one lookup identity and one resource id, the
-  start precedes the terminal event, and both share the operation stem. Terminal events include
-  `*_completed`, `message_pii_scan`, `deletion_marker_check`, `analytics_profile_read`.
-- Repeated starts in one group, interleaved stems, completed-before-started, or multiple
-  identities/resources ⇒ `ambiguous`, no link, flagged.
+  start precedes the outcome, no other start lies between them, and the outcome is an allowed
+  terminal for that start: the same-stem `*_completed`, or an explicit pair from the
+  `TERMINALS` allow-list in `ingest/logs.py` (e.g. `audit_record_query_started` →
+  `audit_record_read_completed`, `message_scan_started` → `message_pii_scan`). *Implementation
+  refinement:* the supplied logs pair 16 start events with differently-named terminals, so a
+  shared-stem requirement alone would have rejected valid joins; the allow-list is explicit and tested.
+- Multiple lookup identities or resources, or two starts with no outcome between them ⇒ `ambiguous`,
+  no link, flagged. An outcome before any start, or with a non-allowed event pair ⇒ orphan, no link.
+  A start whose lookup value is `null` ⇒ counted as `null_lookup`, no link (not ambiguous).
+- Lookup fields: `lookup_key`, `match_key`, `scan_key`, `subject_key`, `owner_key`, `subject_ref`,
+  `correlation_key` (and `query` in JSON lookup exports).
 - Completed-only lines keep same-line identity only; started-only traces produce no state.
 - `observed_at` = timestamp of the line carrying the outcome.
 - `pool=` / `route=` are recorded as `read_path`; they do not establish a physical copy (H-2b).
@@ -172,8 +184,13 @@ CSV loaders. Activity rows are `ActivityClaim`s, never observations of state.
 
 Eligibility: `captured_at <= audit_at` **and** `observed_at <= audit_at`, inclusive (samples
 `case_16`/`evidence_05` and `case_11`/`evidence_03` cite evidence captured exactly at `audit_at`).
-Invariant: `observed_at <= captured_at` for every fact (measured: all in-file timestamps later
-than capture are `retention_until`/`expires_at`). One `eligible()` function in the store; the
+Expected invariant `observed_at <= captured_at` **does not hold for 2 real facts** (correction of
+an earlier claim that all post-capture timestamps were `retention_until`/`expires_at`):
+`evidence_13` holds `account_1417` NOT_FOUND at 08-12T09:00 (its capture time) and FOUND recorded
+08-14T09:00; `evidence_36` holds `account_5043` NOT_FOUND at 04-09T12:00 and FOUND at 04-11T12:00.
+Both coincide with case cutoffs (`case_135` audit 08-12T09:00, `case_383` audit 04-09T12:00). The
+facts are kept and flagged `observed_after_capture`; the fact-level gate excludes them at those
+cutoffs. Whether they should ever be used is open question 14. One `eligible()` function in the store; the
 validator re-checks every citation.
 
 ## 6. Build roadmap
@@ -243,6 +260,12 @@ classifier conflicts with a `CLASSIFY_REQUEST` event.
 12. `account_001`-style links that exist only via activity timing near `reported_at` (Phase 2).
 13. Are `customer_accounts_failover_replica` (`evidence_54`) and `customer_data_failover_replica`
     (`evidence_52`) the same physical failover? Treated as different copies until shown otherwise.
+14. Facts recorded after their own file's capture time (`evidence_13`, `evidence_36`): usable once
+    `audit_at` passes their `observed_at`, or never? Currently kept, flagged, and gated per fact.
+15. 1,328 observations have no data category (logs and lookup exports state none; inventory
+    `support_records` is ambiguous between message and attachment). Category resolution is Phase 2.
+16. Name-only document facts (legal register, account history report) have no resource id and are
+    kept as `DocumentExtract`s; linking them to resources is Phase 2.
 
 ## 11. Phase 1 test plan (ingestion + store only; `code/tests/`, stdlib `unittest`)
 
@@ -268,7 +291,7 @@ repeats across files).
 | LOG-2 | `evidence_61` | `tr-rp-002` joins `support_002` ↔ `nadia.ionescu@yahoo.com`, `marker_found=false`; untraced `support_5914` line keeps only `nadia.popescu@yahoo.com`, no link to the other subject |
 | LOG-3 | `evidence_16` | `tr-4069320` completed-only ⇒ same-line `correlation_key` link; `tr-2053433` start → `message_pii_scan` terminal; `tr-8311761` lookup key typed as resource id; `tr-6555380` uppercase email normalized |
 | LOG-4 | `evidence_06/11/16/21/25/94` | One line per dialect parses to identical `LogEvent` fields |
-| LOG-5 | real started-only trace (one of the 87, chosen at implementation) | Produces no state observation |
+| LOG-5 | *synthetic* (revised: no real started-only trace exists once non-`_completed` terminals are recognised) | Produces no state observation |
 | LOG-6 | `evidence_08` | `account_8473` FOUND at 08-31 and NOT_FOUND at 2026-09-06T07:00:00Z; file captured 09-06T07:00:00Z = `case_86` `audit_at` ⇒ eligible and latest is ABSENT; cutoff 06:59:59 ⇒ whole file ineligible |
 | LOG-7 | real trace with `pool=` + `route=` | Recorded as `read_path`; `copy_key` stays `logical` |
 | LOG-8 | *synthetic* | (a) one trace, two lookup keys ⇒ ambiguous, no link; (b) repeated start/complete pairs interleaved ⇒ ambiguous; (c) completed before started ⇒ no join; (d) same trace id in two files ⇒ never joined; (e) mismatched stems ⇒ no join |
@@ -279,8 +302,40 @@ repeats across files).
 | PDF-4 | `evidence_18` | `user_18`, `ingrid.dahl@outlook.com`, order `ORD-20261260` |
 | TIME-1 | `evidence_06` | Lines from 09-10 but captured 09-18 ⇒ ineligible for cutoff 2026-09-15T12:00Z |
 | TIME-2 | *synthetic* (anchored on real `audit_record_1738` timings) | Snapshot at T2 lists row with `updated_at` T0; explicit ABSENT log at T1 (T0<T1<T2) ⇒ copy state at T2 is PRESENT |
-| TIME-3 | all ingested facts | `observed_at <= captured_at` for every fact |
+| TIME-1b | `evidence_13` / `case_135` (added) | At audit 08-12T09:00 only the NOT_FOUND row is eligible; the 08-14 FOUND in the same file is excluded |
+| TIME-3 | all ingested facts (revised) | Exactly the 2 known post-capture facts violate `observed_at <= captured_at`; both are flagged, none dropped; no coverage violates it |
 | STORE-1 | `evidence_54` | Primary NOT_LISTED + failover PRESENT returned as a per-copy vector; never collapsed by the store |
 | STORE-2 | `evidence_52`, `evidence_90` | Partial/empty snapshots yield UNKNOWN / NOT_LISTED, never ABSENT |
 | STORE-3 | *synthetic* | Equal `observed_at`, different states ⇒ CONFLICT with both evidence ids |
 | MAN-1 | `evidence_files.csv` | 94 entries; all paths exist; counts 24/28/26/1/4/11 |
+
+## 12. Phase 1 implementation (2026-10-24)
+
+| Module | Responsibility |
+|---|---|
+| `core/model.py` | `CopyKey`, `Observation`, `Coverage`, `TraceJoin`, `DocumentExtract`, `IngestIssue`, `CopyState` |
+| `core/vocab.py` | system/collection vocabulary, identifier typing and extraction |
+| `core/timeutil.py` | UTC timestamp parsing |
+| `core/store.py` | `EvidenceStore`: inclusive `eligible()`, per-copy `copy_states()` (strict / `h2d` identity), `NOT_LISTED` derivation |
+| `ingest/manifest.py` | manifest loader |
+| `ingest/sql_snapshots.py` | sqlite3 execution; generic / typed-copy / inventory tables |
+| `ingest/logs.py` | 6 dialect tokenizers, strict trace joins, log observations |
+| `ingest/json_records.py` | bundles, captures, lookup exports, ledgers |
+| `ingest/text_records.py` | handover text |
+| `ingest/pdf_documents.py` | pypdf extraction, split-time rejoin, document extracts |
+| `ingest/csv_inputs.py` | typed CSV loaders; activity kept as claims |
+| `ingest/loader.py` | manifest-driven loading into the store |
+
+Run tests from the repository root: `python3 -m unittest discover -s code/tests -t code`
+(dependency: `pip install -r code/requirements.txt`, i.e. `pypdf==6.17.0`).
+
+Measured ingestion of the supplied evidence (deterministic across runs):
+
+| Item | Value |
+|---|---|
+| Observations | 2,896 (log 1,072, SQL 891, JSON 890, text 41, PDF 2) |
+| Presence | PRESENT 2,636, ABSENT 245, not stated 15 |
+| Coverage | 199 (C1 118, C3 78, C2 3); 8 declared-empty |
+| Trace joins | 572 joins in 571 trace groups; 393 completed-only groups; 30 null-lookup groups; 0 ambiguous; 0 orphan outcomes |
+| Log lines | 2,211 parsed, 0 unparsed; 1,139 carry no resource state (start lines, cache/connection/retry noise, router/system events) |
+| Issues | 11 PNG `unsupported_in_phase1`; 2 `observed_after_capture` |
