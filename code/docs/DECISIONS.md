@@ -179,6 +179,39 @@ evidence and the Lead Architect accept them.
   and that a text asking to keep the account or saying it is not a deletion request never is.
 - `PROMPT_VERSION` is `intent-v2`, so v1 cache entries are not reused for decisions. Code-side validation
   (label consistency, verbatim quote) is unchanged.
+- Measured in CI run #3 (id 40111949889, commit `a6c63f8`): samples status 0.969, P 1.0, R 0.803, exact
+  0.281, 32/32 deletion; targets 166 COMPLETE / 342 INCOMPLETE / 10 NOT_APPLICABLE (case_533-542, each
+  an explicit correction, opt-out, export, access or other request), 0 unresolved intents, 115 rows
+  blocked. Run #4 (id 40113277715, commit `72832f6`) replayed every model output from the Actions cache:
+  0 live calls, $0, identical results, and listed every blocked case in the job log.
+
+## ADR-016 — Export blocked: decision needed (PROPOSED, not implemented)
+
+115 target rows block the export (run #4):
+
+- 108 COMPLETE rows whose only blocker is the account-proof guard: no account record of the subject
+  appears in any evidence captured by `audit_at`. The account ID is known only from deletion-worker
+  activity timing, which was measured unreliable (P3-6). In the local offline analysis without
+  screenshot facts (126 such rows), 78 had only a retained audit record linked by `subject_reference`
+  and 93 had five or more candidate accounts in the request window.
+- 6 rows with the guard plus an unresolved decision: case_39 `data_flow_1121` (flow state),
+  case_50 `analytics_7438` (category), case_53 `support_1034` (category), case_55 `backup_9287`
+  (restore state), case_61 `object_19` (category), case_63 `marketing_001` (presence; also an uncited
+  check). Each of these resources is linked only by a data-catalog claim or has no state evidence
+  before the cutoff.
+- 1 row with an account link but an unresolved decision: case_46 `tombstone_17` (treatment unknown).
+
+Options, smallest first:
+
+1. Keep the guard (current): no `output.csv`.
+2. Allow a COMPLETE row without an account step when no account record of the subject appears in any
+   eligible evidence, exporting only the cited checks for evidenced resources and listing the missing
+   account proof in the report. Unblocks 108 rows; the 7 decision rows stay blocked. Risk: an account
+   copy nobody captured could still exist; the labels include a timing-identified account step in such
+   cases, so step recall stays lower.
+3. Additionally, for a resource linked only by a catalog claim with no eligible evidence of its
+   category or state, emit no step (as the labels do for `case_07` `object_19`) instead of an
+   unresolved decision. Unblocks case_50, 53, 61, 63 (with option 2); case_39, 46, 55 stay blocked.
 
 ---
 

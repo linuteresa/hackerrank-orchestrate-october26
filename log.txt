@@ -752,3 +752,48 @@ repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+
+## [2026-10-24T16:51:50Z] Live CI runs #2-#4, intent prompt v2, evaluation and usage reports
+
+User Prompt (verbatim, secrets redacted):
+1. Use the latest successful workflow run if it already includes live intent and screenshot results. Otherwise trigger “Deletion audit run” on latest main with run_target=true. Avoid repeating paid calls unnecessarily.
+
+2. Inspect the smoke report and confirm:
+- Intent classification and cache reuse succeeded.
+- All 11 screenshots were processed.
+- Usage and cost reporting are populated.
+
+3. Download the artifacts and model caches. Reuse validated caches for subsequent offline runs.
+
+4. Report the actual live results:
+- Status accuracy, step precision/recall and exact-sequence accuracy across all 32 samples.
+- Non-deletion classification counts.
+- Remaining target export blockers, grouped by cause.
+
+5. Fix the highest-impact remaining problems using general, evidence-backed rules. Prioritize missing account links and unresolved categories. Keep timing-only candidates uncertain, preserve both audit cutoffs, and retain the export gates. Keep the separate investigator agent out of scope.
+
+6. Run the relevant regression checks and at least three meaningful custom evaluation cases. Update the required evaluation and usage Markdown reports with measured results.
+
+7. When every row passes validation, generate the final 518-row output.csv, update the README, verify a clean run, and package code.zip according to the repository rules.
+
+If final export remains blocked, report the exact unresolved cases, missing evidence and smallest architectural decision needed. Continue all other authorized work; do not invent findings or mark unsupported cases COMPLETE.
+
+Maintain append-only log.txt, record the workflow/run IDs and actual results, and push changes to main.
+
+Agent Response Summary:
+Run #2 (id 40110467404, owner-triggered, commit 03453eb) succeeded live but intent prompt v1 classified seven labelled deletion follow-ups as non-deletion (sample status 0.75); fixed with intent prompt v2 and triggered run #3 (id 40111949889, commit a6c63f8): samples status 0.969, P 1.0, R 0.803, exact 0.281; targets 166 COMPLETE / 342 INCOMPLETE / 10 NOT_APPLICABLE; 115 rows still blocked (114 account-proof guard, 7 unresolved decisions), so no output.csv and no code.zip. Added a general marketing-consent category rule (case_12 fixed), measured that timing plus owner exclusion would be wrong far more often than right (kept uncertain), added 5 custom evaluation cases (5/5 pass), Actions caching of validated model outputs (run #4, id 40113277715: full replay, 0 live calls, $0) and wrote evaluation_report.md and usage_report.md. Artifact zips cannot be downloaded into this container (artifact storage host denied by network policy), so results were read from job logs; the smallest decision needed is recorded as ADR-016.
+
+Actions:
+* GitHub: actions_list / list_workflow_jobs / get_job_logs for runs 40110467404, 40111949889, 40113277715; actions_run_trigger (run #3, run #4, run_target=true); artifact download attempted, blocked by network policy
+* Edited code/core/categories.py, code/tests/test_phase2.py, code/agent/intent.py (intent-v2), code/main.py, .github/workflows/audit-run.yml (Actions cache, custom cases), README.md
+* Created code/evaluation/custom_cases.py, code/evaluation/evaluation_report.md, code/evaluation/usage_report.md
+* Ran: python3 -m unittest discover -s code/tests -t code -> 98 tests OK; python3 code/main.py --sample --offline; python3 code/main.py --offline; python3 code/evaluation/custom_cases.py
+* Updated code/docs/DECISIONS.md (ADR-014 runs #2-#4, ADR-015, ADR-016 proposed, P3-5, P3-6); commits 1eea3be, a6c63f8, 72832f6 and this commit pushed to main
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=main
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
