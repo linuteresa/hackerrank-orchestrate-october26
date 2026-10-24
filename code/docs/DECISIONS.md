@@ -134,6 +134,20 @@ evidence and the Lead Architect accept them.
   account; any contract violation. Blocked rows stay in `code/eval/provisional_*.csv`; the root
   `output.csv` is written only when no row is blocked.
 
+## ADR-014 — Manually triggered CI run
+
+- Status: **IMPLEMENTED** (`.github/workflows/audit-run.yml`, `workflow_dispatch` only, `contents: read`).
+- `ANTHROPIC_API_KEY` comes only from the repository Actions secret and is injected into the environment
+  of the credential check, smoke test, sample run and target run; never printed, no header or environment
+  dumps, no `set -x`.
+- Order: offline unit tests → boolean credential check → live smoke test (intent + cache reuse + one
+  screenshot) → samples → targets. Later steps run only if the smoke test passes.
+- Export gate unchanged: `main.py` exit 2 is reported as "export blocked"; artifacts upload with
+  `if: always()` from an explicit path list, including `output.csv` only when the gate wrote it.
+- Verified locally: YAML parses, embedded Python compiles, secret referenced only by name in four steps;
+  smoke script without credentials exits 1 with sanitized reasons and writes no cache. Not yet run on
+  GitHub (requires the Actions secret).
+
 ---
 
 ## Hypotheses (unresolved)

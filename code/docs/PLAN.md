@@ -393,3 +393,24 @@ Revision (2026-10-24, second session start): automatic fallback removed; unknown
 unknown; live-run and historical cached cost separated. Environment checks at session start:
 `GHOST_DATA_ENV_CHECK == "ready"` False, `ANTHROPIC_API_KEY` non-empty False, so live intent and
 screenshot calls remain blocked. 94 unittest cases pass.
+
+## 15. Manual CI run (`.github/workflows/audit-run.yml`)
+
+Triggered only by hand (Actions → "Deletion audit run" → Run workflow; input `run_target`, default on).
+
+| Step | What it does | Uses the secret |
+|---|---|---|
+| Install, unit tests | `pip install -r code/requirements.txt`; `python -m unittest discover -s code/tests -t code` (offline) | no |
+| Credential check | prints only `ANTHROPIC_API_KEY available to Python: True/False`; stops if missing | yes |
+| Live smoke test | one intent classification (then a re-run that must come from cache) and one screenshot extraction through the real client; writes `smoke_report.json` with statuses, sanitized reasons, record counts and ledger totals | yes |
+| Sample run | `python code/main.py --sample`, output teed to `sample_run.txt` and the job summary | yes |
+| Target run | `python code/main.py`; exit 0 = validated `output.csv` written, exit 2 = export gate refused (reported, not a failure), other = failure | yes |
+| Upload | always runs; explicit file list only: smoke report, run transcripts, `code/eval/provisional_{sample,target}.csv`, `unresolved_*.json`, `usage_*.json`, and `output.csv` only if the gate wrote it | no |
+
+Setup: add the repository Actions secret `ANTHROPIC_API_KEY` (Settings → Secrets and variables → Actions).
+The secret is mapped only into the steps that call Claude; nothing prints it, request headers or the
+environment, and no step enables shell tracing. Audit cutoffs and export gates are enforced by the code,
+not the workflow. Usage accounting: live calls made by the smoke step appear in `smoke_report.json`;
+the sample run reuses those cache entries and reports them under `historical_cached`, so the live cost
+of a workflow run is the sum of the `live_run` totals across the smoke, sample and target reports.
+Model-output cache files (`code/cache/`) stay on the runner and are not uploaded or committed.
