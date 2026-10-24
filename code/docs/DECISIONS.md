@@ -144,7 +144,12 @@ evidence and the Lead Architect accept them.
   screenshot) → samples → targets. Later steps run only if the smoke test passes.
 - Export gate unchanged: `main.py` exit 2 is reported as "export blocked"; artifacts upload with
   `if: always()` from an explicit path list, including `output.csv` only when the gate wrote it.
-- Verified locally: YAML parses, embedded Python compiles, secret referenced only by name in four steps;
+- Revision (approved): the upload also includes `code/cache/intent/*.json` and `code/cache/vision/*.json`
+  (model outputs + usage metadata); `code/cache/` is git-ignored. A pre-upload scan of exactly the
+  selected files fails the upload on the secret value or credential-like strings (file names only are
+  printed). Local test with fake values found and fixed a bug: a missing `output.csv` made `grep` exit 2
+  and masked a real match; the scan now lists only existing files.
+- Verified locally: YAML parses, embedded Python compiles, secret referenced only by name in five steps;
   smoke script without credentials exits 1 with sanitized reasons and writes no cache. Not yet run on
   GitHub (requires the Actions secret).
 

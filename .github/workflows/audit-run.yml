@@ -5,6 +5,9 @@
 # headers, dumps the environment, or enables shell tracing (`set -x`).
 #
 # Audit cutoffs and export gates are enforced by the code itself; this workflow never relaxes them.
+# Model-output cache entries (code/cache/{intent,vision}/*.json: model, purpose, prompt version, input
+# digest, timestamp, usage, output) are uploaded for inspection and reproducibility; they are never
+# committed (code/cache/ is git-ignored) and are scanned for credential-like content before upload.
 # `code/main.py` exits 2 when the export gate refuses the final output.csv: that is reported as
 # "export blocked", not as a failed run, and the provisional results are still uploaded.
 
@@ -147,8 +150,31 @@ jobs:
           fi
           tail -n 8 ci-artifacts/target_run.txt | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload run artifacts
+      - name: Verify selected artifacts contain no credentials
+        id: scan
         if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Prints file names only, never matched content.
+          shopt -s nullglob
+          files=()
+          for f in ci-artifacts/*.json ci-artifacts/*.txt code/eval/provisional_*.csv code/eval/unresolved_*.json \
+                   code/eval/usage_*.json code/cache/intent/*.json code/cache/vision/*.json output.csv; do
+            [ -f "$f" ] && files+=("$f")
+          done
+          [ "${#files[@]}" -eq 0 ] && { echo "no artifact files to scan"; exit 0; }
+          found=0
+          if grep -lE 'sk-ant-[A-Za-z0-9_-]{8,}|x-api-key|[Aa]uthorization:' "${files[@]}"; then found=1; fi
+          if [ -n "$ANTHROPIC_API_KEY" ] && grep -lF -- "$ANTHROPIC_API_KEY" "${files[@]}"; then found=1; fi
+          if [ "$found" -ne 0 ]; then
+            echo "Credential-like content found in the files listed above; upload skipped."
+            exit 1
+          fi
+          echo "Scanned ${#files[@]} files: no credential-like content."
+
+      - name: Upload run artifacts
+        if: always() && steps.scan.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: deletion-audit-run-${{ github.run_number }}
@@ -164,4 +190,6 @@ jobs:
             code/eval/unresolved_target.json
             code/eval/usage_sample.json
             code/eval/usage_target.json
+            code/cache/intent/*.json
+            code/cache/vision/*.json
             output.csv

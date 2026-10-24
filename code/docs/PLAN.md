@@ -405,7 +405,8 @@ Triggered only by hand (Actions → "Deletion audit run" → Run workflow; input
 | Live smoke test | one intent classification (then a re-run that must come from cache) and one screenshot extraction through the real client; writes `smoke_report.json` with statuses, sanitized reasons, record counts and ledger totals | yes |
 | Sample run | `python code/main.py --sample`, output teed to `sample_run.txt` and the job summary | yes |
 | Target run | `python code/main.py`; exit 0 = validated `output.csv` written, exit 2 = export gate refused (reported, not a failure), other = failure | yes |
-| Upload | always runs; explicit file list only: smoke report, run transcripts, `code/eval/provisional_{sample,target}.csv`, `unresolved_*.json`, `usage_*.json`, and `output.csv` only if the gate wrote it | no |
+| Credential scan | always runs; scans only the selected artifact files for the secret value, `sk-ant-` tokens, `x-api-key` or `Authorization:` and prints file names only; any hit skips the upload | yes (value compared, never printed) |
+| Upload | runs when the scan passes; explicit file list only: smoke report, run transcripts, `code/eval/provisional_{sample,target}.csv`, `unresolved_*.json`, `usage_*.json`, model-output cache entries `code/cache/intent/*.json` and `code/cache/vision/*.json`, and `output.csv` only if the gate wrote it | no |
 
 Setup: add the repository Actions secret `ANTHROPIC_API_KEY` (Settings → Secrets and variables → Actions).
 The secret is mapped only into the steps that call Claude; nothing prints it, request headers or the
@@ -413,4 +414,5 @@ environment, and no step enables shell tracing. Audit cutoffs and export gates a
 not the workflow. Usage accounting: live calls made by the smoke step appear in `smoke_report.json`;
 the sample run reuses those cache entries and reports them under `historical_cached`, so the live cost
 of a workflow run is the sum of the `live_run` totals across the smoke, sample and target reports.
-Model-output cache files (`code/cache/`) stay on the runner and are not uploaded or committed.
+Model-output cache entries (model, purpose, prompt version, input digest, timestamp, usage, output) are
+uploaded for inspection and reproducibility but never committed: `code/cache/` is git-ignored.

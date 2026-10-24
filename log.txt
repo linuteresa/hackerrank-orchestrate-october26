@@ -680,3 +680,53 @@ repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+## [2026-10-24T16:08:41Z] SESSION START
+
+Container restarted; continuing the existing project and conversation.
+
+tool=Claude Code
+model=claude-opus-5-5
+Repo Root: /home/user/hackerrank-orchestrate-october26
+Branch: main
+Worktree: main
+Parent Agent: none
+Language: py
+Time Remaining: not configured
+
+## [2026-10-24T16:10:09Z] Upload model-output caches as artifacts; credential scan; keep caches out of Git
+
+User Prompt (verbatim, secrets redacted):
+Workflow approved.
+
+Add these paths to the artifact upload:
+- code/cache/intent/*.json
+- code/cache/vision/*.json
+
+Keep them out of Git. Upload only the model outputs and usage metadata, never credentials.
+
+Commit and push this small change to main. After the workflow runs, inspect its reports and cached outputs, report the live sample metrics and remaining target blockers, and continue fixing supported evidence-discovery issues.
+
+Keep the audit cutoffs and export gates unchanged. Maintain log.txt.
+Continue the existing project and preserve the full log.txt history.
+
+When recording a runtime restart, explicitly state:
+“Container restarted; continuing the existing project and conversation.”
+
+Append the workflow-creation turn with the required prompt, response summary, actions and context. Never include secret values. Commit and push the log with the workflow changes.
+
+Agent Response Summary:
+Recorded the container restart with the required sentence (log history intact; the workflow-creation turn was already appended at 2026-10-24T16:05:08Z and pushed in efcd923, so it was not duplicated). Added the two cache globs to the explicit upload list, git-ignored code/cache/, and added a pre-upload scan of exactly the selected files for the secret value or credential-like strings that prints file names only and blocks the upload on any hit. A local test with fake values exposed a bug (a missing output.csv made grep exit 2 and hid a real match); fixed by scanning only existing files, after which planted values were caught and clean files passed. Audit cutoffs and export gates unchanged.
+
+Actions:
+* Edited .github/workflows/audit-run.yml (cache paths, credential scan, upload condition) and .gitignore (code/cache/)
+* Local checks: YAML parse; git check-ignore on a probe cache file; scan script with fake values (clean pass, planted value and token both blocked)
+* Updated code/docs/PLAN.md (section 15) and code/docs/DECISIONS.md (ADR-014 revision); appended restart SESSION START and this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=main
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
