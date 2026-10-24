@@ -4,7 +4,9 @@ All numbers below were measured, not estimated. Source of record: GitHub Actions
 "Deletion audit run" run #8 (id 40115185798, commit `dbfac7f`), which replayed every model output
 from the cache (0 live calls). The same cache was rebuilt locally from that run's log (409 entries,
 each verified against its digest-derived file name) and local offline runs reproduce run #8 exactly.
-Live model outputs were produced in run #3 (id 40111949889).
+Live model outputs were produced in run #3 (id 40111949889). Later cache replays (runs #9, #10 and
+the final handoff run) reproduce the same sample metrics and the same target predictions; the
+submitted `output.csv` (SHA-256 below) is byte-identical across them.
 
 ## How it is measured
 
