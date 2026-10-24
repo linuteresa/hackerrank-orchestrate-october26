@@ -62,17 +62,46 @@ evidence and the Lead Architect accept them.
 
 - Status: **ACCEPTED** (Lead Architect, 2026-10-24). Design in PLAN §5.2.
 
+## ADR-006 — Identity links require a strong identifier; timing needs exclusive corroboration
+
+- Status: **IMPLEMENTED (Phase 2 baseline)**, awaiting review.
+- Links: record identifiers or lookup keys (email current/historical, phone digits, email hash
+  incl. sha256 of every known email, user id); `LINK_RESOURCE_IDENTITY` activity; request-window
+  account DELETE only if exactly one window account is unowned by anyone else and no account is
+  linked otherwise. Names never link alone. Each link keeps `(kind, evidence_id, locator, detail)`.
+- Refinement P2-2: a lookup-only link must be observed inside the request lifecycle
+  (`observed_at >= requested_at`).
+
+## ADR-007 — Category resolution order
+
+- Status: **IMPLEMENTED (Phase 2 baseline)**. Explicit record type → collection → event/record shape
+  (e.g. `attachment_pii_scan`, PDF `file`/`uploader` fields) → unambiguous id family. `analytics_*`
+  and `support_*` families stay unresolved without other evidence. Conflicts stay unresolved.
+
+## ADR-008 — Copy classes and omission precedence (resolves H-2b, H-2d, H-COV for the baseline)
+
+- Status: **IMPLEMENTED (Phase 2 baseline)**, awaiting review.
+- `copy_class`: named physical copies (`primary`, `*_replica`) → one class per
+  `(database, role, region, instance)`; everything else → one service view. So a positive logical
+  read shows the record remains available without naming a replica; an unmapped logical read cannot
+  clear a named physical copy; a later snapshot of the same named table supersedes an earlier one.
+- `coverage_admissible`: C1, C2, C3. Omission counts only for a class with no explicit eligible
+  observation of the resource (P2-1).
+- Resource PRESENT if any class's latest fact is PRESENT; ABSENT if every class with facts ends absent
+  or not-listed (explicit absence cited before omission); else UNKNOWN.
+
 ---
 
 ## Hypotheses (unresolved)
 
 | ID | Hypothesis | Status | Evidence so far |
 |---|---|---|---|
-| H-2b | A logical API lookup can update a physical copy when a mapping is established (`pool=`, `route=` in the same trace) | **Unresolved** | Logs carry `pool=<system>_primary` / `<system>_replica` (e.g. 20/25 account pools) and `route=primary` after retries; `replica` pools do not name *which* replica |
+| H-2b | A logical API lookup can update a physical copy when a mapping is established (`pool=`, `route=` in the same trace) | **Baseline: no** (ADR-008; logical reads update the service view only) | Logs carry `pool=<system>_primary` / `<system>_replica` (e.g. 20/25 account pools) and `route=primary` after retries; `replica` pools do not name *which* replica |
 | H-2c | A generic table covers every `(system, collection)` seen in any copy table of the same file | **NOT APPROVED → WITHDRAWN** | Counterexample below |
-| H-2d | The same table name in different snapshot files is the same physical copy | **Unresolved** | Needed for supersession. Store default is `strict` (copies scoped per evidence file); `identity="h2d"` mode exists for Phase 2 evaluation (STORE-3 shows the two modes diverge) |
-| H-COV | `NOT_LISTED` under C1/C2/C3 is admissible proof of absence | **Unresolved (Phase 2)** | Samples `case_01/02/04` (C2, `evidence_54`) and `case_31` (C1, `evidence_51`) cite omission as ABSENT. No evidence declares any snapshot's selection scope; snapshot size alone does not establish filtering, so `filter_scope` is recorded as unknown |
-| H-TIME | Facts recorded after their own file's capture time may be used once `audit_at >= observed_at` | **Unresolved** | 2 real instances (`evidence_13`, `evidence_36`); both sit at case cutoffs where the fact-level gate excludes them |
+| H-2d | The same table name in different snapshot files is the same physical copy | **Baseline: yes for named physical copies** (ADR-008; no resource appears in two SQL files, so samples cannot falsify it) | Needed for supersession. Store default is `strict` (copies scoped per evidence file); `identity="h2d"` mode exists for Phase 2 evaluation (STORE-3 shows the two modes diverge) |
+| H-COV | `NOT_LISTED` under C1/C2/C3 is admissible proof of absence | **Baseline: yes, below explicit facts** (ADR-008, P2-1) | Samples `case_01/02/04` (C2, `evidence_54`) and `case_31` (C1, `evidence_51`) cite omission as ABSENT. No evidence declares any snapshot's selection scope; snapshot size alone does not establish filtering, so `filter_scope` is recorded as unknown |
+| H-TIME | Facts recorded after their own file's capture time may be used once `audit_at >= observed_at` | **Unresolved; no sample decision affected** |
+| H-DISC | Resource *discovery* may use facts with `observed_at <= audit_at` from files captured later (citations unchanged) | **Open — decision needed** (P2-3: +2 sample steps, 0 new errors; contradicts the approved capture cutoff) | 2 real instances (`evidence_13`, `evidence_36`); both sit at case cutoffs where the fact-level gate excludes them |
 
 ### H-2c counterexample (2026-10-24; framing corrected at `GO STEP 1`)
 
@@ -107,6 +136,13 @@ affected copies are `UNKNOWN` (regression test SQL-3).
 | P1-1 | Shared-stem start/terminal pairing is sufficient for joins | Replaced by explicit `TERMINALS` allow-list (same stem still allowed) | stem-only: `message_scan_started`→`message_pii_scan` etc. unjoinable | 572 joins, 0 ambiguous, 0 orphan outcomes on supplied logs | Keep (tested by LOG-3, LOG-8e) |
 | P1-2 | `lookup_key=null` starts are ambiguous traces | Counted as `null_lookup`, no link, no issue | 36 false "ambiguous" issues (30 null + 6 `owner_key` not yet recognised) | 0 ambiguous; `owner_key` added as lookup field | Keep |
 | P1-3 | Every in-file timestamp after capture is a semantic date | Store flags `observed_after_capture` | assumption untested | 2 real violations found and flagged (TIME-3) | Keep flagging; usage open (H-TIME) |
+| P2-0 | First end-to-end baseline | — | — | status 0.906, P 0.866, R 0.668, exact 0.031; 11 contract violations (future steps cited evidence) | Fix bug |
+| P2-1 | Omission must not override an explicit observation of the same class | NOT_LISTED skipped for classes with explicit facts | `case_24` account_5334 ABSENT (wrong) | PRESENT, cites evidence_92 | Keep |
+| P2-2 | Lookup links outside the request lifecycle are not this request's | lookup-only links need `observed_at >= requested_at` | `case_17` extra account_6523 (March lookup) | removed | Keep |
+| P2-0b | INCOMPLETE future steps must not cite | blank evidence for remediation/verification when findings exist | 11 violations | 0 violations; with P2-1, P2-2: status 0.9375, P 0.987, R 0.782, F1 0.873, exact 0.25 | Keep |
+| P2-3 | Discovery by record time (H-DISC) | `discoverable = observed_at <= audit_at` (experiment only) | R 0.7824 | R 0.7927, P 0.9871 (`case_09` gains `account_3960`, `audit_record_4902`) | Not adopted — needs your decision |
+| P2-4 | Wide request-window linking with exclusion | all deletion-worker targets in `[requested_at, reported_at]` minus resources owned by others | — | 44 right vs 336 wrong candidates | Rejected |
+| P2-5 | Narrow batch window (3 h before `reported_at`) + exclusion, accounts only | experiment only | — | 8 right, 0 wrong, 19 ambiguous, 5 none | Candidate for next round |
 
 ## Phase 1 decision record (2026-10-24)
 

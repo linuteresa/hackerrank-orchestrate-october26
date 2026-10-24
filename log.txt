@@ -398,3 +398,55 @@ repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+## [2026-10-24T15:20:39Z] GO STEP 2: Phase 2 deterministic baseline and sample evaluation
+
+User Prompt (verbatim, secrets redacted):
+Phase 1 accepted. GO STEP 2 under our simplified architecture.
+
+Implement identity resolution, evidence gathering, policy application, step planning, output validation and sample evaluation. Aim for the first end-to-end sample results within 90 minutes. Reuse the existing ingestion code.
+
+My architectural guidance:
+
+1. Identity
+Resolve current and historical identifiers using participant-facing evidence. Require corroboration for name-only documents and timing-only links. Preserve the reason for each resource-to-person link.
+
+2. Missing categories
+Resolve categories from explicit record types, collections and other eligible evidence for the same system/resource. Keep genuinely ambiguous categories unresolved. Missing identifier fields are not proof of redaction or anonymization.
+
+3. Logical reads
+A positive API read can establish that a retained record remains available without identifying its physical replica. An unmapped logical lookup cannot clear a known physical replica.
+
+4. Coverage and copy identity
+Put coverage admissibility and copy matching in small, centralized functions. Use evidence-backed rules, document remaining assumptions and evaluate their consequences against the samples. Avoid building more configuration modes.
+
+5. Timestamp anomalies
+Preserve the flagged rows and existing inclusive capture/observation cutoffs. Do not alter timestamps to make them consistent. Escalate H-TIME only if it affects an actual case decision.
+
+Run predictions independently of sample_output.csv; use sample answers only for evaluation. Do not hardcode case-specific answers.
+
+Report:
+- Status, step, field and exact-sequence accuracy.
+- Mismatched case IDs and concrete failure reasons.
+- Unresolved identity/category counts affecting sample cases.
+- Actual test results.
+
+Proceed with implementation now. Keep the separate investigator agent out of scope. After the baseline, we will prioritize measured failures and add the planned intent and PNG helpers.
+
+Agent Response Summary:
+Implemented the deterministic Phase 2 baseline: identity index (current/historical identifiers, computed email hashes) with reasoned resource links, category resolution, centralized copy_class/coverage_admissible rules, policy engine, planner, contract validator, evaluator and CLI. Sample results: status 0.9375, step precision 0.987 / recall 0.782 / F1 0.873, exact sequence 0.25, 0 contract violations; 518 target rows produced in 1.6s (10 COMPLETE rows with an uncited step, 15 with no steps). Dominant failure is unlinked accounts (20/32 samples, 336/518 targets) whose only connection is workflow activity timing; measured window experiments and a record-time discovery variant (H-DISC) are reported for decision, not adopted. 80 unittest cases pass; predictions never read sample_output.csv.
+
+Actions:
+* Created code/core/identity.py, code/core/categories.py, code/core/resource_state.py, code/policy.py, code/planner.py, code/validate.py, code/audit.py, code/eval/__init__.py, code/eval/evaluate.py, code/tests/test_phase2.py; rewrote code/main.py; edited code/ingest/pdf_documents.py (file/uploader fields)
+* Ran: python3 code/main.py --sample ; python3 code/main.py --output <scratchpad>/target_smoke.csv ; python3 -m unittest discover -s code/tests -t code -> Ran 80 tests, OK
+* Experiments via scratchpad scripts (window linking, batch linking, discovery-time variant)
+* Viewed two PNG screenshots to scope Phase 3 (not used for predictions)
+* Updated code/docs/PLAN.md, code/docs/DECISIONS.md, .gitignore; appended this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+

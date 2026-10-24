@@ -42,6 +42,8 @@ LABELLED = {
     "order": r"^order (ORD-\d+)$",
     "statement": r"^statement (.+)$",
     "integrity_seal": r"^integrity seal (.+)$",
+    "file_name": r"^file (\S+\.\w{2,4})$",
+    "uploader": r"^uploader (\w+)$",
 }
 
 
@@ -107,6 +109,9 @@ def parse_pdf(evidence, path):
     if len(resources) > 1:
         result.issues.append(IngestIssue(evidence.file_id, "multi_resource_document", evidence.path, ",".join(resources)))
     attributes = {"document_title": title}
+    for name in ("file_name", "uploader"):
+        if name in fields:
+            attributes[name] = fields[name]
     for name in ("recorded", "retain_until", "issued", "generated", "submitted", "received", "captured"):
         if name in fields:
             attributes[name] = parse_doc_datetime(fields[name])

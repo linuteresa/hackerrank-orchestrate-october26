@@ -1,9 +1,7 @@
 # PLAN — Ghost Data Still Exists deletion-audit agent
 
-Status: **Phase 1 implemented (2026-10-24, `GO STEP 1`)** — ingestion parsers, observation/coverage store and tests;
-62 unittest cases pass. Awaiting Lead Architect review before any Phase 2 work. H-2b, H-2d and H-COV remain unresolved.
-Owner of decisions: Lead Architect (user). Implementation partner: Claude Code.
-Companion file: `code/docs/DECISIONS.md` (ADRs and measured experiments).
+Status: **Phase 2 baseline implemented (2026-10-24, `GO STEP 2`)** — deterministic end-to-end audit of the 32
+samples and 518 targets; 80 unittest cases pass. Awaiting Lead Architect review of measured failures.
 
 ---
 
@@ -339,3 +337,31 @@ Measured ingestion of the supplied evidence (deterministic across runs):
 | Trace joins | 572 joins in 571 trace groups; 393 completed-only groups; 30 null-lookup groups; 0 ambiguous; 0 orphan outcomes |
 | Log lines | 2,211 parsed, 0 unparsed; 1,139 carry no resource state (start lines, cache/connection/retry noise, router/system events) |
 | Issues | 11 PNG `unsupported_in_phase1`; 2 `observed_after_capture` |
+
+## 13. Phase 2 baseline (2026-10-24)
+
+Pipeline per request (`code/audit.py`): subject identity → linked resources → category →
+per-copy state → policy decision → ordered steps → contract validation. No model calls.
+
+| Module | Responsibility |
+|---|---|
+| `core/identity.py` | `IdentityIndex` (current + historical email/phone/hash, sha256 hashes of every email), `link_resources` with per-link reasons |
+| `core/categories.py` | category from explicit record type → collection → event/record shape → unambiguous id family |
+| `core/resource_state.py` | `copy_class` (copy matching), `coverage_admissible` (H-COV), resource presence, exposure / flow / restore signals |
+| `policy.py` | `deletion_rules.csv` actions → findings, remediation, verification per resource |
+| `planner.py` | phase → operation-table order → `system_id` → `resource_id`; compact sorted-key JSON |
+| `validate.py` | output contract checks (fields, phase/state per operation, numbering, order, citations, cutoff) |
+| `eval/evaluate.py` | status, step P/R/F1, position-aligned field accuracy, exact sequence |
+| `main.py` | `python3 code/main.py [--sample]` |
+
+Resolved Phase 1 hypotheses (sample-measured, see DECISIONS ADR-006..008):
+
+- **H-2b / H-2d → copy classes.** Explicitly named physical copies form one class per
+  `(database, role, region, instance)` across files; all other sources form one service view.
+  Logical reads update the service view only; they never clear a named physical copy.
+- **H-COV → admissible with precedence.** C1/C2/C3 omission establishes absence only for a copy class
+  with no explicit eligible observation of the resource.
+
+Sample results (baseline): status 30/32 (0.9375); step precision 0.987, recall 0.782, F1 0.873;
+exact sequence 8/32 (0.25). Field accuracy is position-aligned, so one missing early step shifts
+all later fields: phase 0.782, system/resource 0.575, operation/state 0.622, evidence 0.788.
