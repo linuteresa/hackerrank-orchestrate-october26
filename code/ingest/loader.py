@@ -14,7 +14,7 @@ from ingest.text_records import parse_text
 TEXT_PARSERS = {"sql": parse_sql, "json": parse_json, "log": parse_log, "text": parse_text}
 
 
-def parse_file(evidence, dataset_dir):
+def parse_file(evidence, dataset_dir, claude=None):
     path = Path(dataset_dir) / evidence.path
     if not path.exists():
         result = ParseResult()
@@ -24,15 +24,21 @@ def parse_file(evidence, dataset_dir):
         return TEXT_PARSERS[evidence.kind](evidence, path.read_text(encoding="utf-8"))
     if evidence.kind == "pdf":
         return parse_pdf(evidence, path)
+    if evidence.kind == "png" and claude is not None:
+        from agent.vision import extract
+        from ingest.png_facts import parse_png_facts
+
+        extraction, source = extract(claude, path)
+        return parse_png_facts(evidence, extraction, source)
     result = ParseResult()
-    # PNG screenshots are extracted by the Phase 3 vision step; nothing is guessed here.
+    # Without a Claude client, screenshots are not read; nothing is guessed here.
     result.issues.append(IngestIssue(evidence.file_id, "unsupported_in_phase1", evidence.path, evidence.kind))
     return result
 
 
-def load_store(dataset_dir, files=None):
+def load_store(dataset_dir, files=None, claude=None):
     store = EvidenceStore()
     for evidence in files if files is not None else load_manifest(dataset_dir):
         store.add_file(evidence)
-        store.add(evidence.file_id, parse_file(evidence, dataset_dir))
+        store.add(evidence.file_id, parse_file(evidence, dataset_dir, claude))
     return store

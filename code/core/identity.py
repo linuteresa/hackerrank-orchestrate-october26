@@ -8,10 +8,15 @@ Every resource-to-person link records *why* it was made (``Link.reasons``). Link
                     (trace-joined or on the same line), observed within the request lifecycle
                     (``observed_at >= requested_at``);
 * ``catalog``     - a ``LINK_RESOURCE_IDENTITY`` activity names a strong identifier of the subject;
-* ``window``      - a deletion-worker DELETE of an account inside the request window
-                    (``requested_at <= t <= reported_at``). Timing alone is never enough: the link
-                    is made only when exactly one window account is not strongly linked to anybody
-                    else (corroboration by exclusion), and only if no account is linked otherwise.
+* ``vision``      - as ``identifier``, but the observation comes from a screenshot extraction
+                    (shape-validated in code).
+
+Uncertain *candidates* are kept apart from confirmed links and never produce steps:
+
+* ``activity_window`` - a deletion-worker activity targets the resource inside the request window
+                        (``requested_at <= t <= min(reported_at, audit_at)``). Timing is only a
+                        candidate signal; excluding other known owners does not establish ownership.
+                        A candidate becomes a link only through an independent confirmed link above.
 
 Names are weak: a name match alone never creates a link.
 """
@@ -129,8 +134,8 @@ def discoverable(obs, audit_at):
     return obs.captured_at <= audit_at and obs.observed_at <= audit_at
 
 
-def link_resources(subject, request, store, index, activity):
-    """Return ``{(system_id, resource_id): Link}`` for the subject at the request's cutoff."""
+def link_resources(subject, request, store, activity):
+    """Return ``(links, candidates)``: confirmed links and uncertain timing candidates."""
     audit_at = request.audit_at
     links = {}
 
@@ -147,7 +152,8 @@ def link_resources(subject, request, store, index, activity):
             # A lookup is a query event: it speaks for this request only inside its lifecycle.
             if source == "lookup" and obs.observed_at < request.requested_at:
                 continue
-            add(obs.system_id, obs.resource_id, (source, obs.evidence_id, obs.locator, f"{kind}={value}"))
+            kind_label = "vision" if obs.source_kind == "png" else source
+            add(obs.system_id, obs.resource_id, (kind_label, obs.evidence_id, obs.locator, f"{kind}={value}"))
             break
 
     for claim in activity:
@@ -158,32 +164,12 @@ def link_resources(subject, request, store, index, activity):
         if emails & subject.strong["email"] or users & subject.strong["user_id"]:
             add(claim.target_system, claim.resource_id, ("catalog", claim.activity_id, "details", claim.details[:80]))
 
-    if not any(system == "account_service" for system, _ in links):
-        account = _window_account(subject, request, store, index, activity)
-        if account:
-            add("account_service", account[0], ("window", account[1], "activity", "exclusive window account"))
-    return links
-
-
-def _window_account(subject, request, store, index, activity):
-    candidates = [
-        c for c in activity
-        if c.source_system == "deletion_worker" and c.target_system == "account_service"
-        and c.event_type == "DELETE_RECORD" and request.requested_at <= c.event_time <= request.reported_at
-        and c.event_time <= request.audit_at
-    ]
-    free = []
-    for claim in candidates:
-        owners = set()
-        for obs in store.observations_for("account_service", claim.resource_id):
-            if not discoverable(obs, request.audit_at):
-                continue
-            for kind, value, _ in strong_values(obs):
-                owners |= index.owners_of(kind, value)
-        if not owners - {subject.user_id}:
-            free.append(claim)
-    resources = {c.resource_id for c in free}
-    if len(resources) == 1:
-        claim = free[0]
-        return claim.resource_id, claim.activity_id
-    return None
+    candidates = {}
+    for claim in activity:
+        if (claim.source_system == "deletion_worker"
+                and request.requested_at <= claim.event_time <= min(request.reported_at, audit_at)
+                and (claim.target_system, claim.resource_id) not in links):
+            candidates.setdefault((claim.target_system, claim.resource_id), Link(claim.target_system, claim.resource_id))
+            candidates[(claim.target_system, claim.resource_id)].reasons.append(
+                ("activity_window", claim.activity_id, claim.event_type, claim.reported_result))
+    return links, candidates

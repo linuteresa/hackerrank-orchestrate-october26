@@ -488,3 +488,56 @@ repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+## [2026-10-24T15:38:41Z] GO PHASE 3: intent, screenshots, usage tracking, export gate (on main)
+
+User Prompt (verbatim, secrets redacted):
+```
+GO PHASE 3.
+
+Implement:
+- Cached Claude request-intent classification.
+- Cached, schema-validated extraction for all 11 PNGs.
+- Model-call, token and cost tracking.
+- Integration of extracted facts into the existing deterministic pipeline.
+
+My decisions on your three questions:
+
+1. Later-captured evidence
+Do not use it for discovery, identity linking or citations. Preserve both approved audit cutoffs, even when relaxing them improves sample scores.
+
+2. Activity-window linking
+Use timing matches as candidates requiring independent corroboration. Excluding known owners does not establish ownership.
+
+The pushed identity.py already calls _window_account automatically, although your report says the experiment was not adopted. Reconcile that discrepancy and clearly distinguish confirmed links from uncertain candidates.
+
+3. COMPLETE without proof
+Track insufficient evidence internally as unresolved. Prevent final export of unsupported COMPLETE rows, including empty deletion plans and uncited verification steps. Do not automatically turn uncertainty into INCOMPLETE or invent findings. Keep provisional results in scratch output.
+
+Keep the separate investigator agent out of scope.
+
+After intent and all screenshots are integrated:
+- Rerun all 32 samples and the 518-target validation.
+- Report status accuracy, step precision/recall and exact-sequence accuracy.
+- List remaining unresolved cases and contract violations.
+- Recommend the highest-impact remaining fixes.
+
+Maintain PLAN.md, DECISIONS.md and append-only log.txt. Share the merged PR link and the next measured results.
+```
+
+Agent Response Summary:
+Implemented Phase 3 on main: Claude call layer (claude-opus-5-5, structured outputs, server-side refusal fallback, content-addressed cache, usage/cost ledger), validated intent classifier, screenshot transcription with code-side shape validation, PNG facts as observations, confirmed links vs activity-window candidates (removing the unadopted _window_account path, recall 0.7824 -> 0.7772), unresolved tracking and an export gate that keeps unsupported rows provisional. The container has no Anthropic credentials, so no live model call was possible: all intents and all 11 screenshots are unresolved, no model output was fabricated, and root output.csv was refused (518/518 rows blocked). Samples: status 0.9375, P 0.987, R 0.777, exact 0.25. 91 unittest cases pass.
+
+Actions:
+* Created code/agent/{__init__,llm,intent,vision}.py, code/ingest/png_facts.py, code/tests/test_agent.py; edited code/core/identity.py, code/core/categories.py, code/ingest/loader.py, code/audit.py, code/main.py, code/tests/test_phase2.py, code/tests/helpers.py, code/requirements.txt (anthropic==2.3.0), .gitignore
+* pip install anthropic==2.3.0; checked API reachability (401 without credentials); read environment-secrets documentation
+* Ran: python3 -m unittest discover -s code/tests -t code -> Ran 91 tests, OK; python3 code/main.py --sample; python3 code/main.py (final export refused)
+* Updated code/docs/PLAN.md (section 14) and code/docs/DECISIONS.md (ADR-009..013, H-DISC rejected, P3-1, P3-2)
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=main
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+

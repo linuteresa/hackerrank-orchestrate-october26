@@ -44,3 +44,14 @@ def synthetic_file(file_id, kind, captured_at, path="synthetic", origin="synthet
 
 def obs_where(observations, **criteria):
     return [o for o in observations if all(getattr(o, k) == v for k, v in criteria.items())]
+
+
+@functools.lru_cache(maxsize=1)
+def _sample_requests():
+    from ingest.csv_inputs import load_requests
+
+    return {r.case_id: r for r in load_requests(DATASET, "sample_deletion_requests.csv")}
+
+
+def samples_for(case_id):
+    return _sample_requests()[case_id]

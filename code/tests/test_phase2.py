@@ -20,7 +20,7 @@ from validate import validate_row
 
 @functools.lru_cache(maxsize=1)
 def auditor():
-    return Auditor(DATASET)
+    return Auditor(DATASET, offline=True)
 
 
 @functools.lru_cache(maxsize=1)
@@ -90,6 +90,21 @@ class ResourceStateTest(unittest.TestCase):
         self.assertEqual((state.presence, state.evidence_id), (ABSENT, "evidence_92"))
 
 
+class CandidateTest(unittest.TestCase):
+    def test_timing_matches_are_candidates_not_links(self):
+        result = auditor().audit(samples()["case_21"])
+        self.assertNotIn(("account_service", "account_6440"), result.links)
+        self.assertIn(("account_service", "account_6440"), result.candidates)
+        self.assertEqual(result.candidates[("account_service", "account_6440")].reasons[0][0], "activity_window")
+        self.assertIn(("account_link", "no confirmed account_service link"), result.unresolved)
+
+    def test_unsupported_complete_rows_are_blocked_not_converted(self):
+        result = auditor().audit(samples()["case_01"])  # no confirmed resources at all
+        self.assertEqual((result.status, result.steps), ("COMPLETE", []))
+        self.assertIn("complete_without_steps", result.export_blockers())
+        self.assertIn("unresolved:intent", result.export_blockers())  # offline: intent never guessed
+
+
 class PolicyTest(unittest.TestCase):
     def steps(self, case_id):
         return [(s.phase, s.operation, s.resource_id, s.evidence_id) for s in auditor().audit(samples()[case_id]).steps]
@@ -141,7 +156,8 @@ class SampleRegressionTest(unittest.TestCase):
         metrics, _ = evaluate(predicted, load_answers(DATASET / "sample_output.csv"))
         self.assertGreaterEqual(metrics["status_accuracy"], 0.93)
         self.assertGreaterEqual(metrics["step_precision"], 0.98)
-        self.assertGreaterEqual(metrics["step_recall"], 0.78)
+        # 0.782 -> 0.777 when timing-only account links became candidates (Phase 3 decision).
+        self.assertGreaterEqual(metrics["step_recall"], 0.77)
 
 
 if __name__ == "__main__":

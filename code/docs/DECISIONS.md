@@ -90,6 +90,43 @@ evidence and the Lead Architect accept them.
 - Resource PRESENT if any class's latest fact is PRESENT; ABSENT if every class with facts ends absent
   or not-listed (explicit absence cited before omission); else UNKNOWN.
 
+## ADR-009 — Model call layer
+
+- Status: **IMPLEMENTED (Phase 3)**. `claude-opus-5-5`; JSON-schema structured output; server-side
+  refusal fallback `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`); refusal / truncation
+  never parsed. Cache keyed by `sha256(model, purpose, prompt_version, input digest)`; each entry stores
+  its usage so cached reruns can still report cost. Pricing constant: $4 / $20 per MTok in/out, $0.20
+  cache read, $5 cache write (first-party list price, 2026-10). Credentials only from the environment.
+- Missing credentials raise `ModelUnavailable` once per run; the dependent decision stays unresolved.
+
+## ADR-010 — Intent classification
+
+- Status: **IMPLEMENTED, not yet run live**. Model proposes `{authorizes_deletion, request_type,
+  language, evidence_quote, confidence}`; code rejects inconsistent labels and non-verbatim quotes.
+  NON_DELETION → `NOT_APPLICABLE` with `[]`. `CLASSIFY_REQUEST` activity is a claim: a conflict is
+  recorded as a note, not resolved.
+
+## ADR-011 — Screenshot extraction
+
+- Status: **IMPLEMENTED, not yet run live**. Generic transcription schema; code keeps only shape-valid
+  identifiers and resource ids; observations are a `document`-role copy at manifest capture time, so
+  both approved cutoffs apply. Screen record kinds map to categories by keyword (one match only).
+
+## ADR-012 — Confirmed links vs uncertain candidates (reconciles the Phase 2 discrepancy)
+
+- Status: **IMPLEMENTED (Lead Architect decision 2)**. The Phase 2 code still adopted an exclusive
+  window account as a link (`_window_account`) although the report called the experiment unadopted;
+  that path is removed. Activity-window matches are `candidates` with reason `activity_window`, never
+  produce steps, and become links only through an independent confirmed link. Measured: recall
+  0.7824 → 0.7772 (one sample step lost), precision unchanged.
+
+## ADR-013 — Export gate
+
+- Status: **IMPLEMENTED (Lead Architect decision 3)**. `CaseResult.export_blockers()`: unresolved
+  intent or subject; COMPLETE with no steps, an uncited step, an unresolved decision, or no verified
+  account; any contract violation. Blocked rows stay in `code/eval/provisional_*.csv`; the root
+  `output.csv` is written only when no row is blocked.
+
 ---
 
 ## Hypotheses (unresolved)
@@ -101,7 +138,7 @@ evidence and the Lead Architect accept them.
 | H-2d | The same table name in different snapshot files is the same physical copy | **Baseline: yes for named physical copies** (ADR-008; no resource appears in two SQL files, so samples cannot falsify it) | Needed for supersession. Store default is `strict` (copies scoped per evidence file); `identity="h2d"` mode exists for Phase 2 evaluation (STORE-3 shows the two modes diverge) |
 | H-COV | `NOT_LISTED` under C1/C2/C3 is admissible proof of absence | **Baseline: yes, below explicit facts** (ADR-008, P2-1) | Samples `case_01/02/04` (C2, `evidence_54`) and `case_31` (C1, `evidence_51`) cite omission as ABSENT. No evidence declares any snapshot's selection scope; snapshot size alone does not establish filtering, so `filter_scope` is recorded as unknown |
 | H-TIME | Facts recorded after their own file's capture time may be used once `audit_at >= observed_at` | **Unresolved; no sample decision affected** |
-| H-DISC | Resource *discovery* may use facts with `observed_at <= audit_at` from files captured later (citations unchanged) | **Open — decision needed** (P2-3: +2 sample steps, 0 new errors; contradicts the approved capture cutoff) | 2 real instances (`evidence_13`, `evidence_36`); both sit at case cutoffs where the fact-level gate excludes them |
+| H-DISC | Resource *discovery* may use facts with `observed_at <= audit_at` from files captured later (citations unchanged) | **REJECTED** by the Lead Architect (GO PHASE 3) despite +2 sample steps: both cutoffs stay for discovery, linking and citation | 2 real instances (`evidence_13`, `evidence_36`); both sit at case cutoffs where the fact-level gate excludes them |
 
 ### H-2c counterexample (2026-10-24; framing corrected at `GO STEP 1`)
 
@@ -142,7 +179,9 @@ affected copies are `UNKNOWN` (regression test SQL-3).
 | P2-0b | INCOMPLETE future steps must not cite | blank evidence for remediation/verification when findings exist | 11 violations | 0 violations; with P2-1, P2-2: status 0.9375, P 0.987, R 0.782, F1 0.873, exact 0.25 | Keep |
 | P2-3 | Discovery by record time (H-DISC) | `discoverable = observed_at <= audit_at` (experiment only) | R 0.7824 | R 0.7927, P 0.9871 (`case_09` gains `account_3960`, `audit_record_4902`) | Not adopted — needs your decision |
 | P2-4 | Wide request-window linking with exclusion | all deletion-worker targets in `[requested_at, reported_at]` minus resources owned by others | — | 44 right vs 336 wrong candidates | Rejected |
-| P2-5 | Narrow batch window (3 h before `reported_at`) + exclusion, accounts only | experiment only | — | 8 right, 0 wrong, 19 ambiguous, 5 none | Candidate for next round |
+| P2-5 | Narrow batch window (3 h before `reported_at`) + exclusion, accounts only | experiment only | — | 8 right, 0 wrong, 19 ambiguous, 5 none | Rejected: exclusion is not ownership (decision 2) |
+| P3-1 | Timing-only account link must not be a confirmed link | `_window_account` removed; timing → candidates | R 0.7824 | R 0.7772, P 0.9868 | Keep (decision 2) |
+| P3-2 | Unsupported COMPLETE rows must not be exported | export gate | output.csv written unconditionally | samples 32/32, targets 518/518 blocked (intent unresolved without credentials); rows blocked for other reasons: samples 11, targets 129 | Keep |
 
 ## Phase 1 decision record (2026-10-24)
 

@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 code/eval/sample_predictions.csv
+code/eval/provisional_*.csv
+code/eval/unresolved_*.json
+code/eval/usage_*.json

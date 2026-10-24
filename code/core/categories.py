@@ -58,7 +58,30 @@ UNAMBIGUOUS_FAMILY = (
 )
 
 
+# Screenshot record kinds (free text transcribed by the vision step) -> category. Keywords only;
+# a kind matching several entries stays unresolved.
+SCREEN_KIND_CATEGORY = (
+    ("marketing", "MARKETING_PROFILE"),
+    ("attachment", "SUPPORT_ATTACHMENT"),
+    ("audit", "SECURITY_AUDIT_LOG"),
+    ("tombstone", "ACCOUNT_TOMBSTONE"),
+    ("connector", "DATA_FLOW"),
+    ("backup", "BACKUP_ARCHIVE"),
+    ("export", "USER_EXPORT"),
+    ("search", "SEARCH_INDEX_ENTRY"),
+    ("telemetry", "PRODUCT_TELEMETRY"),
+)
+
+
+def _screen_category(obs):
+    kind = (obs.attributes.get("record_kind") or "").lower()
+    found = {category for keyword, category in SCREEN_KIND_CATEGORY if keyword in kind}
+    return found.pop() if len(found) == 1 else None
+
+
 def _shape_category(obs):
+    if obs.source_kind == "png":
+        return _screen_category(obs)
     if obs.attributes.get("event") in EVENT_CATEGORY:
         return EVENT_CATEGORY[obs.attributes["event"]]
     if obs.attributes.get("section") in SECTION_CATEGORY:

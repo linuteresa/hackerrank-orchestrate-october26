@@ -1,7 +1,8 @@
 # PLAN — Ghost Data Still Exists deletion-audit agent
 
-Status: **Phase 2 baseline implemented (2026-10-24, `GO STEP 2`)** — deterministic end-to-end audit of the 32
-samples and 518 targets; 80 unittest cases pass. Awaiting Lead Architect review of measured failures.
+Status: **Phase 3 implemented on `main` (2026-10-24, `GO PHASE 3`), live model calls blocked** — intent and
+screenshot steps are built, cached and tested, but this container has no Anthropic credentials, so no model
+output exists yet; every row is held back from final export. 91 unittest cases pass. PR #1 (Phases 1–2) merged.
 
 ---
 
@@ -365,3 +366,25 @@ Resolved Phase 1 hypotheses (sample-measured, see DECISIONS ADR-006..008):
 Sample results (baseline): status 30/32 (0.9375); step precision 0.987, recall 0.782, F1 0.873;
 exact sequence 8/32 (0.25). Field accuracy is position-aligned, so one missing early step shifts
 all later fields: phase 0.782, system/resource 0.575, operation/state 0.622, evidence 0.788.
+
+## 14. Phase 3: intent, screenshots, usage, export gate (2026-10-24)
+
+| Module | Responsibility |
+|---|---|
+| `agent/llm.py` | `Claude` call layer: `claude-opus-5-5`, JSON-schema structured output, `fallbacks: "default"`; content-addressed cache `code/cache/<purpose>/<sha256>.json`; `Ledger` of live vs cached calls, tokens and USD cost; `ModelUnavailable` when no credentials |
+| `agent/intent.py` | request-intent classification (effort `low`); code validation: label consistency + verbatim `evidence_quote` |
+| `agent/vision.py` | screenshot transcription schema (records, identifiers, fields; effort `medium`) |
+| `ingest/png_facts.py` | shape-validates every transcribed value; resource-id records → `document`-role observations at manifest capture time; others → document rows |
+| `audit.py` | intent gate (NON_DELETION → NOT_APPLICABLE `[]`), `CLASSIFY_REQUEST` conflicts noted, confirmed links vs `activity_window` candidates, `unresolved` tracking, `export_blockers()` |
+| `main.py` | provisional output, unresolved and usage reports in `code/eval/`; root `output.csv` only when no row is blocked; `--offline` |
+
+Lead Architect decisions applied (GO PHASE 3):
+1. Later-captured evidence is never used for discovery, identity linking or citations (H-DISC rejected).
+2. Activity-window timing produces candidates only; exclusion of known owners does not establish ownership.
+3. Unsupported COMPLETE rows (empty plan, uncited step, unresolved decision, no verified account) and rows
+   with unresolved intent/subject are blocked from final export; they stay provisional, never auto-INCOMPLETE.
+
+Measured (no credentials, so intent and screenshots unresolved): samples status 0.9375, step precision
+0.987, recall 0.777, F1 0.870, exact 0.25; 0 sample contract violations. Targets: 518 provisional rows,
+10 rows with contract violations (all uncited COMPLETE verifications), 518/518 export-blocked (intent).
+Model usage this run: 0 calls (no credentials).
