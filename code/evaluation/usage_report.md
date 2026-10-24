@@ -6,6 +6,9 @@ The latest full-dataset run (run #8, id 40115185798, commit `dbfac7f`) audited a
 strict gate refused `output.csv` (111 rows blocked); the explicit best-effort mode wrote all 518 rows
 with every unverified row classified (see `evaluation_report.md`). Both used exactly the model outputs
 below. Reported from the job logs of GitHub Actions workflow "Deletion audit run".
+The final submission-candidate run on the handoff commit (artifact `submission-candidate-<run>`)
+replays the same cached outputs with 0 live calls; the submitted `output.csv` therefore rests on
+exactly the 529 model calls tabulated below (518 intent, 11 screenshot).
 
 - Run #3 (id 40111949889, commit `a6c63f8`): every model output was produced live in that run (the
   sample step produced the 32 sample intents and 11 screenshot extractions; the target step reused

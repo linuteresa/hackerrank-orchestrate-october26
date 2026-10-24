@@ -78,6 +78,7 @@ def run(requests_name, auditor):
     for request in requests:
         result = auditor.audit(request)
         result.audit_at = request.audit_at
+        result.requested_at = request.requested_at
         steps_json = to_json(result.steps)
         errors = validate_row(request.case_id, result.status, steps_json, citation_checker(auditor, request.audit_at))
         if errors:
@@ -105,17 +106,40 @@ def unresolved_report(results, blockers):
     return report
 
 
+def pre_request_citations(result, auditor):
+    """Cited steps whose evidence was captured before the request: a state observed then is assumed to
+    persist to ``audit_at``; it is not post-deletion verification."""
+    captured = {fid: ev.captured_at for fid, ev in auditor.store.files.items()}
+    activity_times = {a.activity_id: a.event_time for a in auditor.activity}
+    out = []
+    for step in result.steps:
+        when = captured.get(step.evidence_id) or activity_times.get(step.evidence_id)
+        if step.evidence_id and when < result.requested_at:
+            out.append(f"state persistence assumed: {step.operation} {step.resource_id} relies on "
+                       f"{step.evidence_id} captured {when:%Y-%m-%dT%H:%M:%SZ}, before the request; "
+                       f"not post-deletion verification")
+    return out
+
+
 def best_effort(rows, results, blockers, auditor):
-    """``(rows, classes, failures)``: every row, its export class, and rows that still cannot be exported."""
+    """``(rows, classes, failures)``: every row, its export class, and rows that still cannot be exported.
+
+    Classes, most to least certain: ``verified`` (gate passed; all cited evidence captured after the
+    request), ``verified_with_unresolved`` (gate passed; some linked records unresolved),
+    ``persistence_assumed`` (gate passed; a cited state comes from evidence captured before the
+    request), ``best_effort`` (exported only in this mode).
+    """
     out, classes, failures = [], {}, {}
     for case_id, status, steps_json in rows:
         result = results[case_id]
         omitted = [d for k, d in result.unresolved if k == "decision"]
         reasons = blockers.get(case_id, [])
+        persisted = pre_request_citations(result, auditor)
         if not reasons:
             out.append((case_id, status, steps_json))
-            classes[case_id] = {"class": "verified_with_unresolved" if omitted else "verified", "status": status,
-                                "assumptions": [f"unresolved, no finding reported: {d}" for d in omitted]}
+            label = "persistence_assumed" if persisted else "verified_with_unresolved" if omitted else "verified"
+            classes[case_id] = {"class": label, "status": status,
+                                "assumptions": persisted + [f"unresolved, no finding reported: {d}" for d in omitted]}
             continue
         hard = sorted({r for r in reasons if r.startswith("unresolved:")})
         if hard:
@@ -137,6 +161,7 @@ def best_effort(rows, results, blockers, auditor):
         assumptions = [ASSUMPTIONS[k] for k in kinds if k in ASSUMPTIONS]
         assumptions += [f"unresolved, no finding reported: {d}" for d in omitted]
         assumptions += [f"removed uncited step: {r}" for r in removed]
+        assumptions += pre_request_citations(result, auditor)
         out.append((case_id, status, steps_json))
         classes[case_id] = {"class": "best_effort", "status": status, "blockers": sorted(set(reasons)),
                             "assumptions": assumptions}

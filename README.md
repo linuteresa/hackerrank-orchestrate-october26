@@ -25,7 +25,23 @@ python3 -m pip install -r code/requirements.txt   # pypdf, anthropic
 export ANTHROPIC_API_KEY=...                       # read from the environment only; never stored
 ```
 
-**Run** (from the repository root):
+**Submission** (from the repository root; this is the command that produces the submitted
+`output.csv` and `code.zip`):
+
+```bash
+python3 code/main.py --best-effort   # writes ./output.csv (518 rows) and code/eval/export_classes_target.json
+python3 code/package.py              # writes ./code.zip
+```
+
+The submitted `output.csv` is a **best-effort submission candidate**, not a strict export: every row
+passes the contract validation (schema, ordering, citations, cutoffs), but 111 COMPLETE rows are
+classified `best_effort` (not verified deletions) and one INCOMPLETE row `persistence_assumed`; see
+`code/evaluation/evaluation_report.md`. The strict command (`python3 code/main.py`) remains the default
+and still refuses to write `output.csv` while any row is blocked. `output.csv` is git-ignored; the
+canonical copy is the CI artifact `submission-candidate-<run>`, which also carries `code.zip`,
+`log.txt`, the export-class report and their SHA-256 hashes.
+
+**Other runs** (from the repository root):
 
 ```bash
 python3 code/main.py --sample      # audit + evaluate the 32 labelled samples
@@ -45,7 +61,7 @@ violation. Exit code 2 means the export was refused; the reasons are listed in `
 `--best-effort` writes `output.csv` with every row, but only if every row still passes the mandatory
 contract validation (schema, ordering, citation and cutoff checks); it adds no step and only removes
 uncited checks from COMPLETE rows. Each row's class (`verified`, `verified_with_unresolved`,
-`best_effort`) and the assumptions behind it are written to `code/eval/export_classes_target.json`
+`persistence_assumed`, `best_effort`) and the assumptions behind it are written to `code/eval/export_classes_target.json`
 and summarized in `code/evaluation/evaluation_report.md`. A best-effort COMPLETE row is **not** a
 verified deletion.
 

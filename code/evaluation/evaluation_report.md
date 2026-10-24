@@ -56,9 +56,11 @@ integrated:
   `user_17`, which the catalog maps to `tombstone_17`; no name or email is displayed, which does not
   prove redaction, so a future redaction check is planned (1 step). The label does not include it.
 
-Measured experiment (not adopted, decision needed — see ADR-019): requiring state evidence to be
-captured at or after `requested_at` removes both (precision 1.0, exact 0.281) but leaves one more
-target row blocked (112 instead of 111) and one more contract violation (2 instead of 1).
+Measured experiment, **not adopted** (ADR-019): requiring state evidence to be captured at or after
+`requested_at` removes both (precision 1.0, exact 0.281) but leaves one more target row blocked
+(112 instead of 111) and one more contract violation (2 instead of 1). A blanket date filter derived
+only from the sample pattern would discard real evidence, so pre-request states are kept under an
+explicit persistence assumption and labelled instead (ADR-020, below).
 
 ### Remaining sample omissions by cause (38 steps)
 
@@ -118,10 +120,10 @@ row is classified in `code/eval/export_classes_target.json` and in the run log:
 
 | Class | Rows | Meaning |
 |---|---:|---|
-| verified (COMPLETE) | 51 | every COMPLETE check cites evidence at or before `audit_at`; account proof present |
-| verified (INCOMPLETE) | 345 | findings cite evidence; remediation and checks are future work |
+| verified (COMPLETE) | 51 | every COMPLETE check cites evidence captured after the request and at or before `audit_at`; account proof present (post-deletion verification) |
+| verified (INCOMPLETE) | 345 | findings cite evidence captured after the request; remediation and checks are future work |
 | verified (NOT_APPLICABLE) | 10 | non-deletion request, `[]` |
-| verified_with_unresolved (INCOMPLETE) | 1 | case_33: `export_1842` presence unknown; no finding reported for it |
+| persistence_assumed (INCOMPLETE) | 1 | case_33: the `export_1260` finding cites `evidence_23`, captured 2026-06-18, before the request; the record is assumed to persist to `audit_at` (not post-deletion verification); also `export_1842` presence unknown, no finding reported |
 | **best_effort (COMPLETE)** | **111** | exported only in best-effort mode; **not verified** |
 
 Assumptions behind the 111 best-effort COMPLETE rows:
@@ -136,6 +138,44 @@ Assumptions behind the 111 best-effort COMPLETE rows:
 The complete list of best-effort case ids with their assumptions is printed by every best-effort run
 and stored in `export_classes_target.json`; the strict mode (default) still refuses to write
 `output.csv` while any row is blocked.
+
+### State persistence vs post-deletion verification (ADR-020)
+
+A state observed in evidence captured **after** the request and at or before `audit_at` is treated as
+the state after the deletion workflow: findings report it and COMPLETE checks verify it. A state
+observed only in evidence captured **before** the request can say nothing about what the deletion
+did; it is used under an explicit persistence assumption (the record still exists unless later
+eligible evidence says otherwise) and is never presented as post-deletion verification. In the
+submitted target output this affects one cited step (case_33, labelled `persistence_assumed`). In the
+samples it explains the 4 extra steps above (case_07 `object_19`, case_17 `tombstone_17`), which
+are findings and future checks, not verifications.
+
+## Submitted output (best-effort submission candidate)
+
+Produced by `python3 code/main.py --best-effort` from the cached model outputs of run #3 (prompt
+versions `intent-v2`, `vision-v1`); the strict mode would refuse to write it.
+
+| Property | Value |
+|---|---|
+| File | `output.csv` (repository root; git-ignored; canonical copy in the CI artifact `submission-candidate-<run>`) |
+| Rows | 518 data rows + header `case_id,deletion_status,steps_json`, sorted by `case_id` |
+| SHA-256 | `43cec51e2e0bb41cceaf170ae7d3cf6e45a6356a9d38aebf7ed4a0b9b554aa9d` |
+| Statuses | 162 COMPLETE, 346 INCOMPLETE, 10 NOT_APPLICABLE |
+| Validation | every row passes `validate_row` (schema, step numbering, phase order, allowed operation/state, citations captured at or before `audit_at`, future steps uncited) |
+| Classes | 406 verified, 1 persistence_assumed, 111 best_effort (see the table above and `export_classes_target.json`) |
+
+Limitations of the submitted file:
+
+- 111 COMPLETE rows are **not verified deletions**: 110 lack any account record of the subject in
+  evidence before the cutoff (the account step the labels expect is identified only by
+  deletion-worker timing, which this system does not accept as ownership); case_46 and case_55 also
+  carry an unresolved record (`tombstone_17`, `backup_9287`) that the COMPLETE status does not cover.
+- Expected step recall is limited by the same rules (sample recall 0.803; 27 of 38 missing sample
+  steps are timing-only resources, 7 come from evidence captured after `audit_at`).
+- One cited finding relies on pre-request evidence (case_33, persistence assumed).
+- The file's hash is reproducible from the repository at the packaged commit plus the model cache;
+  `code.zip` does not contain the model cache, so a run from `code.zip` alone needs
+  `ANTHROPIC_API_KEY` and may differ if the model's answers differ.
 
 ## Participant-created evaluation cases
 

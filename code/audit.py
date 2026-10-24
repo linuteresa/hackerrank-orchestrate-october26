@@ -36,6 +36,7 @@ class CaseResult:
     unresolved: list = field(default_factory=list)  # (kind, detail)
     notes: list = field(default_factory=list)
     audit_at: object = None
+    requested_at: object = None
 
     def export_blockers(self):
         """Reasons this row must not be exported as final output (empty list = exportable)."""

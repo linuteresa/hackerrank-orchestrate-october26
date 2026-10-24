@@ -185,6 +185,22 @@ jobs:
           mkdir -p ci-artifacts
           python code/package.py 2>&1 | tee ci-artifacts/package.txt
 
+      - name: Assemble submission candidate (code.zip, output.csv, log.txt, export classes)
+        id: submission
+        if: steps.best_effort.outcome == 'success'
+        run: |
+          mkdir -p ci-artifacts/submission
+          cp code.zip output.csv log.txt code/eval/export_classes_target.json ci-artifacts/submission/
+          ( cd ci-artifacts/submission && sha256sum code.zip output.csv log.txt export_classes_target.json > SHA256SUMS )
+          echo "source commit: $GITHUB_SHA" | tee -a ci-artifacts/submission/SHA256SUMS.txt
+          cat ci-artifacts/submission/SHA256SUMS | tee -a ci-artifacts/submission/SHA256SUMS.txt
+          {
+            echo "### Submission candidate (best-effort; see evaluation_report.md)"
+            echo '```'
+            cat ci-artifacts/submission/SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Verify selected artifacts contain no credentials
         id: scan
         if: always()
@@ -196,9 +212,10 @@ jobs:
           files=()
           for f in ci-artifacts/*.json ci-artifacts/*.txt code/eval/provisional_*.csv code/eval/unresolved_*.json \
                    code/eval/usage_*.json code/eval/export_classes_*.json code/cache/intent/*.json \
-                   code/cache/vision/*.json output.csv; do
+                   code/cache/vision/*.json output.csv log.txt; do
             [ -f "$f" ] && files+=("$f")
           done
+          for f in ci-artifacts/submission/*; do [ -f "$f" ] && [ "${f##*.}" != zip ] && files+=("$f"); done
           [ "${#files[@]}" -eq 0 ] && { echo "no artifact files to scan"; exit 0; }
           found=0
           if grep -lE 'sk-ant-[A-Za-z0-9_-]{8,}|x-api-key|[Aa]uthorization:' "${files[@]}"; then found=1; fi
@@ -258,3 +275,13 @@ jobs:
             code/cache/vision/*.json
             output.csv
             code.zip
+            log.txt
+
+      - name: Upload submission candidate
+        if: always() && steps.scan.outcome == 'success' && steps.submission.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: submission-candidate-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: ci-artifacts/submission/

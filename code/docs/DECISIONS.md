@@ -259,7 +259,7 @@ strict gate blocks 111 rows (run #8): 110 account-proof guard, case_46 `tombston
   that the file name equals the digest of their own model, purpose, prompt version and input digest
   (409 entries, 0 rejected). Local offline runs reproduce run #8 exactly.
 
-## ADR-019 — Request-lifecycle lower bound for state evidence (PROPOSED, not implemented)
+## ADR-019 — Request-lifecycle lower bound for state evidence (REJECTED as a blanket filter)
 
 - Observation: every evidence id cited in the labelled samples (41 findings, 34 verifications) was
   captured after the request's `reported_at`; none before `requested_at`. A capture made before the
@@ -271,8 +271,24 @@ strict gate blocks 111 rows (run #8): 110 account-proof guard, case_46 `tombston
 - Measured experiment (state evidence must be captured at or after `requested_at`): samples P 1.0,
   exact 0.281 (both extras removed, recall unchanged); targets 112 rows blocked (vs 111) and 2 contract
   violations (vs 1), because some currently cited states lose their only evidence.
-- Decision needed: adopt (lifecycle bound on state evidence, linking unchanged) or keep the current
-  rule (any capture at or before `audit_at`).
+- Decision (Lead Architect, 2026-10-24): not adopted. A blanket date filter derived only from the
+  sample pattern would discard real evidence. Current rule kept (any capture at or before `audit_at`);
+  pre-request state is labelled instead (ADR-020).
+
+## ADR-020 — State persistence from pre-request evidence (IMPLEMENTED as labelling only)
+
+- A state observed before the request (e.g. a record shown PRESENT on a screen captured months
+  earlier) is used under an explicit persistence assumption: the observed state is assumed to hold at
+  `audit_at` unless later eligible evidence shows otherwise. It is not post-deletion verification,
+  which requires evidence captured after the request.
+- Predictions are unchanged. The best-effort export-class report (`export_classes_target.json`) marks
+  any row whose cited evidence was captured before the request as `persistence_assumed`, naming the
+  step, the evidence and its capture time. In the final target output this applies to one row:
+  case_33 (REPORT_REMAINING_RECORD `export_1260`, `evidence_23` captured 2026-06-18).
+- Uncited consequences (e.g. the future redaction check for `tombstone_17` in sample case_17, from a
+  screen captured 10 Mar) are documented in the evaluation report; they cite nothing and are not
+  presented as verification.
+- Feature work is frozen after this ADR (Lead Architect, 2026-10-24).
 
 ---
 

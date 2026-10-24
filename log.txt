@@ -842,3 +842,37 @@ branch=main
 repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-24T17:31:28Z] Final handoff: feature freeze, persistence labelling, submission artifact
+
+User Prompt (verbatim, secrets redacted):
+Freeze feature work.
+
+Do not adopt ADR-019’s blanket date filter solely from the sample pattern. Document state-persistence assumptions for pre-request evidence and distinguish them from post-deletion verification.
+
+Keep strict export unchanged and retain the clearly labelled best-effort submission candidate. Keep output.csv git-ignored.
+
+Finish the handoff:
+1. Make the README’s submission command unambiguous: python3 code/main.py --best-effort.
+2. Ensure reports describe the exact packaged output and its limitations.
+3. Append the final development entry to log.txt.
+4. Include root log.txt in the explicit artifact upload and credential scan.
+5. Produce one final artifact containing code.zip, output.csv, log.txt and the export-class report. Report its run link, source commit and full file hashes.
+
+Do not restart model extraction or change predictions without a concrete correctness defect.
+
+Agent Response Summary:
+Feature work frozen; no model call and no prediction change (output.csv SHA-256 43cec51e2e0bb41cceaf170ae7d3cf6e45a6356a9d38aebf7ed4a0b9b554aa9d before and after). ADR-019 recorded as rejected; ADR-020 documents the state-persistence assumption for pre-request evidence, and the export-class report now labels such rows persistence_assumed (one target row, case_33 export_1260 via evidence_23), separate from post-deletion verification. README names python3 code/main.py --best-effort as the submission command; the evaluation report describes the exact submitted output (518 rows, classes, hash) and its limitations; strict export is unchanged and output.csv stays git-ignored. The workflow scans and uploads root log.txt and assembles a single submission-candidate artifact (code.zip, output.csv, log.txt, export_classes_target.json, SHA256SUMS); the final CI run on this commit produces it, and its run link and hashes are reported in the handoff message.
+
+Actions:
+* Edited code/main.py (persistence_assumed classification only), code/audit.py (requested_at field), code/docs/DECISIONS.md (ADR-019 rejected, ADR-020), code/evaluation/evaluation_report.md, code/evaluation/usage_report.md, README.md, .github/workflows/audit-run.yml
+* Ran: python3 -m unittest discover -s code/tests -t code -> 108 tests OK; python3 code/main.py --offline --best-effort (output.csv hash unchanged); python3 code/package.py
+* Committed and pushed to main; triggered the final "Deletion audit run" (run_target=true, cached outputs only)
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=main
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
