@@ -107,6 +107,13 @@ def main(argv=None):
         for reason in set(r.split(":")[0] + (":" + r.split(":")[1] if r.startswith("unresolved") else "") for r in reasons):
             kinds[reason] = kinds.get(reason, 0) + 1
     print("blocker kinds:", json.dumps(kinds, sort_keys=True))
+    statuses = {}
+    for _, status, _ in rows:
+        statuses[status] = statuses.get(status, 0) + 1
+    print("statuses:", json.dumps(statuses, sort_keys=True))
+    non_deletion = {cid: r.intent.request_type for cid, r in results.items()
+                    if getattr(r.intent, "status", None) == "NON_DELETION"}
+    print(f"non-deletion intents: {len(non_deletion)}", json.dumps(non_deletion, sort_keys=True))
     for label, total in usage["totals"].items():
         cost = "unknown" if total["cost_usd"] is None else f"${total['cost_usd']:.4f}"
         print(f"model usage [{label}]: calls={total['calls']} in={total['input_tokens']} "

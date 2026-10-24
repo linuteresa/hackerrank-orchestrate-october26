@@ -155,6 +155,30 @@ evidence and the Lead Architect accept them.
   credential check passed (secret present, masked); live smoke test failed with
   `credentials rejected: AuthenticationError` for both intent and vision - 0 live calls, $0. The API
   rejected the stored key; no code change can fix this. Sample and target steps were skipped as designed.
+- GitHub run #2 (id 40110467404, 2026-10-24T16:12Z, commit `03453eb`, triggered by the repository owner):
+  all steps succeeded. Smoke: intent live then cached, screenshot extracted. Samples (live intent v1):
+  status 0.75, P 1.0, R 0.679, exact 0.219 - seven labelled deletion follow-ups (`case_12`, `case_15`,
+  `case_21`, `case_25`-`case_28`: "verify that my account was deleted", "check nothing was left behind")
+  were classified non-deletion. Targets: 0 unresolved intents; 115 rows blocked (114
+  `complete_without_account_verification`, 7 `complete_with_unresolved`, 6 `complete_without_steps`).
+  Usage: samples 41 live calls / $0.5372; targets 366 live calls, 285,674 in / 21,712 out tokens, $1.5769
+  (+163 cache hits worth $1.0956 recorded earlier in the same run). Credential scan: 418 files clean.
+  The artifact zip could not be downloaded into the development container (artifact storage host denied
+  by the container's network policy), so per-case outputs were not inspected locally.
+- Revision after run #2: `code/cache/` is restored from and saved to the Actions cache (key per run, restore
+  by prefix, saved only after the credential scan passes), so unchanged inputs are not paid for again; the
+  smoke test accepts cache hits; `main.py` prints status counts and the non-deletion case list; the custom
+  evaluation cases run after the target step.
+
+## ADR-015 — Intent prompt v2 (deletion follow-ups)
+
+- Status: **IMPLEMENTED**, measured in the next CI run. Evidence: run #2 above - the v1 prompt listed only
+  new deletion requests as DELETION, so follow-ups asking to verify, confirm, audit or finish the
+  requester's own deletion fell to OTHER. The labelled samples treat all of them as deletion cases.
+- v2 states that such follow-ups (and requests to remove remaining copies) carry the deletion through,
+  and that a text asking to keep the account or saying it is not a deletion request never is.
+- `PROMPT_VERSION` is `intent-v2`, so v1 cache entries are not reused for decisions. Code-side validation
+  (label consistency, verbatim quote) is unchanged.
 
 ---
 

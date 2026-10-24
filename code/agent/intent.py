@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from agent.llm import ModelOutputUnusable, ModelUnavailable, digest
 
 PURPOSE = "intent"
-PROMPT_VERSION = "intent-v1"
+PROMPT_VERSION = "intent-v2"
 REQUEST_TYPES = ("DELETION", "ACCESS", "CORRECTION", "EXPORT", "MARKETING_OPT_OUT", "OTHER")
 
 SCHEMA = {
@@ -30,13 +30,19 @@ SCHEMA = {
 PROMPT = """You classify a customer's privacy request for a deletion audit.
 
 Decide whether the request text asks the company to delete (erase, remove, close and delete) the
-person's account or personal data. Requests that only ask to see or receive a copy of data
-(ACCESS, EXPORT), fix data (CORRECTION), stop marketing messages (MARKETING_OPT_OUT), or anything
-else (OTHER) do not authorize deletion, even if they mention the account or deletion in passing.
+person's own account or personal data, or to carry such a deletion through. This includes:
+- a new request to delete or erase the account or personal data;
+- a follow-up about a deletion the person already requested or believes happened, asking the
+  company to verify, confirm, audit or finish it, or to remove copies that remain or could return.
+
+It does not include requests whose aim is only to see or receive a copy of data (ACCESS, EXPORT),
+fix data (CORRECTION), stop marketing messages (MARKETING_OPT_OUT), or anything else (OTHER), such
+as login help or invoices, even if they mention the account or deletion in passing. A text that asks
+to keep the account or says it is not asking for deletion is never a deletion request.
 The text may be in any language.
 
 Return:
-- authorizes_deletion: true only for an actual deletion request.
+- authorizes_deletion: true only when the text asks for deletion or for a deletion to be carried through.
 - request_type: DELETION when authorizes_deletion is true; otherwise the best non-deletion type.
 - language: ISO 639-1 code of the request text.
 - evidence_quote: the shortest exact phrase copied verbatim from the text that shows the intent.
