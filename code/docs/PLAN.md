@@ -83,6 +83,15 @@ Absence of a resource from a covered copy is a provable fact (sample `case_01`: 
 never appears in any file, yet `VERIFY_RECORD_ABSENT` cites `evidence_54`). Absence is derived
 at query time from `Coverage`, never materialized for every possible resource id.
 
+Coverage scope rule for generic multi-collection tables (`record_json` tables), hypothesis
+**H-2c**: a file's copies jointly cover the set of `(system_id, collection)` pairs that appear
+in *any* copy table of that file. Example: in `evidence_05` the primary table has zero
+`account_service` rows but the read replica has one, so both copies cover
+`account_service/customer_profiles` and the primary's absence of `account_994` is proven.
+Counter-example it prevents: `evidence_52` (`customer_data_failover_replica_20260920.sql`)
+contains only `security_service` and `identity_service` rows, so it must **not** be read as
+proving every account absent from the failover copy.
+
 ### 4.3 State selection (per physical copy)
 
 For a case with cutoff `audit_at`:

@@ -40,6 +40,11 @@ Status values: `PROPOSED`, `ACCEPTED`, `REJECTED`, `SUPERSEDED`.
   2. Select latest eligible fact per copy; aggregate to resource level with
      "any non-compliant copy ⇒ non-compliant".
   3. A `logical` observation does not clear a replica copy (H-2b, to be tested).
+  3a. Coverage of a generic `record_json` table = `(system, collection)` pairs present in any
+      copy table of the same file (H-2c). `evidence_52` therefore covers only
+      security/identity collections and cannot clear `account_005` from the failover copy.
+  3b. Copy identity is `(system_id, copy_role)` (e.g. `account_service/failover_replica`), not
+      the source file, so a later snapshot of the same copy supersedes an earlier one.
   4. Cite the evidence that established the deciding copy's state.
 - Alternatives: (a) latest-per-resource — rejected by `case_05`/`case_16`; (b) "ever present
   in any copy" — over-reports because it ignores later full-coverage snapshots.
