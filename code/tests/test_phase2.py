@@ -63,8 +63,9 @@ class CategoryTest(unittest.TestCase):
         audit = ts("2026-10-01T12:00:00Z")
         obs = store().observations_for("support_platform", "support_4218", audit)
         self.assertEqual(resolve_category("support_4218", obs), ("SUPPORT_ATTACHMENT", "explicit"))
-        obs = store().observations_for("analytics_platform", "analytics_9914", ts("2026-09-15T12:00:00Z"))
-        self.assertEqual(resolve_category("analytics_9914", obs)[0], None)
+        # analytics_7438 (case_50) has only a catalog link: no shape, and analytics_* spans categories.
+        obs = store().observations_for("analytics_platform", "analytics_7438", ts("2026-07-14T12:00:00Z"))
+        self.assertEqual(resolve_category("analytics_7438", obs), (None, "unresolved"))
 
     def test_pdf_attachment_fields_resolve_category(self):
         obs = store().observations_for("support_platform", "support_001", ts("2026-09-12T08:00:00Z"))
@@ -119,6 +120,18 @@ class EvidenceDiscoveryTest(unittest.TestCase):
         # case_372: 'available=true' at 06:55 with the subject's email as correlation key, cutoff 07:00.
         state = resource_state(store(), "export_service", "export_5081", ts("2026-04-19T07:00:00Z"))
         self.assertEqual((state.presence, state.evidence_id), (PRESENT, "evidence_34"))
+
+    def test_email_opt_in_record_is_a_marketing_profile(self):
+        # case_12: analytics_9914 read with email_opt_in=true and the subject's email hash as key.
+        state = resource_state(store(), "analytics_platform", "analytics_9914", ts("2026-09-15T12:00:00Z"))
+        self.assertEqual(resolve_category("analytics_9914", state.eligible_observations), ("MARKETING_PROFILE", "shape"))
+        self.assertIn(("FINDING", "REPORT_REMAINING_RECORD", "analytics_9914", "evidence_01"),
+                      [(s.phase, s.operation, s.resource_id, s.evidence_id)
+                       for s in auditor().audit(samples()["case_12"]).steps])
+
+    def test_marketing_family_maps_to_its_single_rule_category(self):
+        self.assertEqual(resolve_category("marketing_001", []), ("MARKETING_PROFILE", "family"))
+        self.assertEqual(resolve_category("analytics_7438", []), (None, "unresolved"))  # still ambiguous
 
 
 class PolicyTest(unittest.TestCase):

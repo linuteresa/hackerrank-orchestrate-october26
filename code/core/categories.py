@@ -4,7 +4,7 @@ Order of evidence (first unambiguous answer wins):
 
 1. explicit ``record_type`` / handover category on any eligible observation of the resource;
 2. the collection the resource was observed in (``COLLECTION_CATEGORY``);
-3. the observing event or record shape (``EVENT_CATEGORY``, free-text/file fields);
+3. the observing event or record shape (``EVENT_CATEGORY``, ``FIELD_CATEGORY``, free-text/file fields);
 4. the resource-id family, only where the family maps to exactly one category in the supplied
    rules (``UNAMBIGUOUS_FAMILY``). ``analytics_*`` and ``support_*`` are deliberately absent: they
    span several categories (analytics/marketing/telemetry; message/attachment).
@@ -55,6 +55,12 @@ UNAMBIGUOUS_FAMILY = (
     ("audit_record_", "SECURITY_AUDIT_LOG"),
     ("tombstone_", "ACCOUNT_TOMBSTONE"),
     ("legal_hold_", "LEGAL_HOLD_RECORD"),
+    ("marketing_", "MARKETING_PROFILE"),
+)
+
+# Record fields whose presence states the record's purpose (marketing consent).
+FIELD_CATEGORY = (
+    ("email_opt_in", "MARKETING_PROFILE"),
 )
 
 
@@ -86,6 +92,9 @@ def _shape_category(obs):
         return EVENT_CATEGORY[obs.attributes["event"]]
     if obs.attributes.get("section") in SECTION_CATEGORY:
         return SECTION_CATEGORY[obs.attributes["section"]]
+    found = {category for name, category in FIELD_CATEGORY if name in obs.attributes}
+    if len(found) == 1:
+        return found.pop()
     if obs.system_id == "support_platform":
         if "message_excerpt" in obs.attributes or "message_text" in obs.attributes:
             return "SUPPORT_MESSAGE"
