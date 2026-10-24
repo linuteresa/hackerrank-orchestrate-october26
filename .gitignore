@@ -8,3 +8,4 @@ code/eval/usage_*.json
 code/cache/
 code/eval/export_classes_*.json
 code.zip
+/output.csv
