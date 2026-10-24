@@ -21,6 +21,10 @@ on:
         description: "Also audit the 518 target requests after the samples"
         type: boolean
         default: true
+      dump_cache:
+        description: "Print the scanned model-output cache to the log as checksummed base64 (for environments that cannot download artifacts)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -187,6 +191,16 @@ jobs:
             exit 1
           fi
           echo "Scanned ${#files[@]} files: no credential-like content."
+
+      - name: Print model-output cache to the log (opt-in)
+        if: inputs.dump_cache && steps.scan.outcome == 'success'
+        run: |
+          # Model outputs and usage metadata only; the files were credential-scanned in the step above.
+          tar -C code --sort=name --owner=0 --group=0 --numeric-owner --mtime='2026-01-01 00:00Z' \
+              -czf "$RUNNER_TEMP/model-cache.tgz" cache
+          echo "MODEL-CACHE-SHA256 $(sha256sum "$RUNNER_TEMP/model-cache.tgz" | cut -d' ' -f1)"
+          base64 -w 4000 "$RUNNER_TEMP/model-cache.tgz" | sed 's/^/MODEL-CACHE-B64 /'
+          echo "MODEL-CACHE-END"
 
       - name: Save model-output cache
         if: always() && steps.scan.outcome == 'success'
