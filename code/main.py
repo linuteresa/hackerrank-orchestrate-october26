@@ -95,7 +95,7 @@ def main(argv=None):
     write_csv(provisional, rows)
     (SCRATCH / f"unresolved_{name}.json").write_text(
         json.dumps(unresolved_report(results, blockers), indent=1, sort_keys=True) + "\n", encoding="utf-8")
-    usage = auditor.claude.ledger.summary()
+    usage = {"rows": auditor.claude.ledger.summary(), "totals": auditor.claude.ledger.totals()}
     (SCRATCH / f"usage_{name}.json").write_text(json.dumps(usage, indent=1) + "\n", encoding="utf-8")
 
     print(f"{len(rows)} rows -> {provisional} (provisional)")
@@ -107,7 +107,10 @@ def main(argv=None):
         for reason in set(r.split(":")[0] + (":" + r.split(":")[1] if r.startswith("unresolved") else "") for r in reasons):
             kinds[reason] = kinds.get(reason, 0) + 1
     print("blocker kinds:", json.dumps(kinds, sort_keys=True))
-    print("model usage:", json.dumps(usage))
+    for label, total in usage["totals"].items():
+        cost = "unknown" if total["cost_usd"] is None else f"${total['cost_usd']:.4f}"
+        print(f"model usage [{label}]: calls={total['calls']} in={total['input_tokens']} "
+              f"out={total['output_tokens']} cost={cost}")
 
     if args.sample:
         predicted = {cid: (status, json.loads(steps)) for cid, status, steps in rows}

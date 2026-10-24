@@ -371,7 +371,7 @@ all later fields: phase 0.782, system/resource 0.575, operation/state 0.622, evi
 
 | Module | Responsibility |
 |---|---|
-| `agent/llm.py` | `Claude` call layer: `claude-opus-5-5`, JSON-schema structured output, `fallbacks: "default"`; content-addressed cache `code/cache/<purpose>/<sha256>.json`; `Ledger` of live vs cached calls, tokens and USD cost; `ModelUnavailable` when no credentials |
+| `agent/llm.py` | `Claude` call layer: `claude-opus-5-5` only (automatic fallback disabled), JSON-schema structured output; content-addressed cache `code/cache/<purpose>/<sha256>.json`; `Ledger` with live-run vs historical-cached totals and unknown (never zero) cost for unpriced models; `ModelUnavailable` when no credentials |
 | `agent/intent.py` | request-intent classification (effort `low`); code validation: label consistency + verbatim `evidence_quote` |
 | `agent/vision.py` | screenshot transcription schema (records, identifiers, fields; effort `medium`) |
 | `ingest/png_facts.py` | shape-validates every transcribed value; resource-id records → `document`-role observations at manifest capture time; others → document rows |
@@ -388,3 +388,8 @@ Measured (no credentials, so intent and screenshots unresolved): samples status 
 0.987, recall 0.777, F1 0.870, exact 0.25; 0 sample contract violations. Targets: 518 provisional rows,
 10 rows with contract violations (all uncited COMPLETE verifications), 518/518 export-blocked (intent).
 Model usage this run: 0 calls (no credentials).
+
+Revision (2026-10-24, second session start): automatic fallback removed; unknown pricing reported as
+unknown; live-run and historical cached cost separated. Environment checks at session start:
+`GHOST_DATA_ENV_CHECK == "ready"` False, `ANTHROPIC_API_KEY` non-empty False, so live intent and
+screenshot calls remain blocked. 94 unittest cases pass.

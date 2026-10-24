@@ -8,7 +8,7 @@ output into observations after validating every value's shape in code.
 import base64
 from pathlib import Path
 
-from agent.llm import ModelRefused, ModelUnavailable, digest
+from agent.llm import ModelOutputUnusable, ModelUnavailable, digest
 
 PURPOSE = "vision"
 PROMPT_VERSION = "vision-v1"
@@ -85,6 +85,6 @@ def extract(claude, path):
                                      effort="medium", max_tokens=16000)
     except ModelUnavailable as exc:
         return None, f"model unavailable: {exc}"
-    except ModelRefused as exc:
-        return None, f"model refused: {exc}"
+    except ModelOutputUnusable as exc:  # refusal, other model, truncation, invalid JSON
+        return None, f"model output unusable: {exc}"
     return output, source

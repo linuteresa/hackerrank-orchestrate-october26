@@ -92,12 +92,19 @@ evidence and the Lead Architect accept them.
 
 ## ADR-009 — Model call layer
 
-- Status: **IMPLEMENTED (Phase 3)**. `claude-opus-5-5`; JSON-schema structured output; server-side
-  refusal fallback `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`); refusal / truncation
-  never parsed. Cache keyed by `sha256(model, purpose, prompt_version, input digest)`; each entry stores
-  its usage so cached reruns can still report cost. Pricing constant: $4 / $20 per MTok in/out, $0.20
-  cache read, $5 cache write (first-party list price, 2026-10). Credentials only from the environment.
-- Missing credentials raise `ModelUnavailable` once per run; the dependent decision stays unresolved.
+- Status: **IMPLEMENTED (Phase 3); revised 2026-10-24 per Lead Architect**. `claude-opus-5-5` only,
+  plain `messages.create` with JSON-schema structured output. **Automatic model fallback disabled**
+  (no `fallbacks`, no fallback beta): a refusal, a response served by any other model, a truncated
+  response or unparseable JSON is billed and recorded in the ledger, then rejected
+  (`ModelOutputUnusable`) and the dependent decision stays unresolved; rejected output is never cached.
+- Cache keyed by `sha256(model, purpose, prompt_version, input digest)`; each entry stores the usage
+  of the call that produced it.
+- Cost: `Usage.cost()` returns `None` for a model without a known price; any aggregate containing an
+  unpriced call reports `cost_usd: null` with `unpriced_calls`, never zero or a partial sum.
+  `Ledger.totals()` separates `live_run` (calls made in this run) from `historical_cached` (the
+  recorded cost of cache entries reused by this run). Price constant: $4 / $20 per MTok in/out,
+  $0.20 cache read, $5 cache write (first-party list price, 2026-10).
+- Credentials only from the environment; missing credentials raise `ModelUnavailable` once per run.
 
 ## ADR-010 — Intent classification
 

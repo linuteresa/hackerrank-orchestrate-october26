@@ -597,3 +597,46 @@ repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+## [2026-10-24T15:54:35Z] SESSION START
+
+tool=Claude Code
+model=claude-opus-5-5
+Repo Root: /home/user/hackerrank-orchestrate-october26
+Branch: main
+Worktree: main
+Parent Agent: none
+Language: py
+Time Remaining: not configured (unconfirmed planning assumption: ~2026-10-25T08:30 America/New_York, ~16h36m remaining)
+
+## [2026-10-24T15:56:22Z] Env checks (both False); disable fallback; unknown pricing; live vs cached cost
+
+User Prompt (verbatim, secrets redacted):
+Continue the project from main. Read AGENTS.md and the planning documents, and append the required session log.
+
+First check, without displaying any credential:
+- Whether GHOST_DATA_ENV_CHECK equals "ready".
+- Whether ANTHROPIC_API_KEY is non-empty.
+
+Report both as booleans.
+
+Regardless of credential availability, complete the already-authorized changes to disable automatic fallback and correctly distinguish unknown pricing, live cost and historical cached cost. Run the relevant tests.
+
+If both environment checks pass, run one live intent classification and one screenshot extraction. If either fails, report the sanitized error without printing credentials.
+
+Agent Response Summary:
+Pulled main, confirmed AGENTS.md unchanged since the URL fix, appended a SESSION START entry (container restarted). Environment checks printed as booleans only: GHOST_DATA_ENV_CHECK == "ready" False; ANTHROPIC_API_KEY non-empty False; therefore no live intent or screenshot call was made. Completed the authorized changes: removed automatic model fallback (plain messages.create on claude-opus-5-5; off-model, refused, truncated or invalid-JSON responses are billed in the ledger, rejected, not cached and leave the decision unresolved), made unpriced cost unknown (None) instead of zero, and split ledger totals into live_run and historical_cached. 94 unittest cases pass; sample metrics unchanged.
+
+Actions:
+* git pull origin main; environment checks via python3 -c (booleans only)
+* Edited code/agent/llm.py, code/agent/intent.py, code/agent/vision.py, code/main.py, code/tests/test_agent.py
+* Ran: python3 -m unittest discover -s code/tests -t code -> Ran 94 tests, OK; python3 code/main.py --sample (live_run calls 0, historical_cached calls 0)
+* Updated code/docs/DECISIONS.md (ADR-009 revised) and code/docs/PLAN.md; appended SESSION START and this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=main
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+

@@ -5,13 +5,14 @@ All tests use a constructed fake client: no network, no credentials, no real mod
 
 import json
 import tempfile
+from pathlib import Path
 import unittest
 from types import SimpleNamespace
 
 from tests.helpers import DATASET, samples_for, synthetic_file
 
 from agent.intent import classify
-from agent.llm import FALLBACK_BETA, MODEL, Claude, Usage
+from agent.llm import MODEL, Claude, Ledger, Usage
 from audit import Auditor
 from ingest.png_facts import parse_png_facts
 
@@ -19,17 +20,18 @@ TEXT = "Bitte löschen Sie mein Konto und alle meine Daten."
 
 
 class FakeClient:
-    def __init__(self, payload=None, error=None, stop_reason="end_turn"):
+    def __init__(self, payload=None, error=None, stop_reason="end_turn", model=MODEL, raw_text=None):
         self.payload, self.error, self.stop_reason, self.calls = payload, error, stop_reason, []
-        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self.create))
+        self.model, self.raw_text = model, raw_text
+        self.messages = SimpleNamespace(create=self.create)
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         if self.error:
             raise self.error
         return SimpleNamespace(
-            model=MODEL, stop_reason=self.stop_reason,
-            content=[SimpleNamespace(type="text", text=json.dumps(self.payload))],
+            model=self.model, stop_reason=self.stop_reason,
+            content=[SimpleNamespace(type="text", text=self.raw_text if self.raw_text is not None else json.dumps(self.payload))],
             usage=SimpleNamespace(input_tokens=1000, output_tokens=50, cache_read_input_tokens=0,
                                   cache_creation_input_tokens=0),
         )
@@ -53,15 +55,21 @@ class LlmLayerTest(unittest.TestCase):
         intent = classify(live, TEXT)
         self.assertEqual((intent.status, intent.source), ("DELETION", "live"))
         call = fake.calls[0]
-        self.assertEqual((call["model"], call["fallbacks"], call["betas"]), (MODEL, "default", [FALLBACK_BETA]))
+        self.assertEqual(call["model"], MODEL)
+        self.assertNotIn("fallbacks", call)  # automatic fallback disabled
+        self.assertNotIn("betas", call)
         self.assertEqual(call["output_config"]["format"]["type"], "json_schema")
+        self.assertEqual(live.ledger.totals()["live_run"]["calls"], 1)
         # A second client without any model access reuses the cached output and its recorded usage.
         cached = Claude(offline=True, cache_dir=self.tmp.name)
         again = classify(cached, TEXT)
         self.assertEqual((again.status, again.source), ("DELETION", "cache"))
         summary = cached.ledger.summary()[0]
         self.assertEqual((summary["source"], summary["calls"], summary["input_tokens"]), ("cache", 1, 1000))
-        self.assertAlmostEqual(summary["cost_usd"], Usage(MODEL, 1000, 50).cost())
+        totals = cached.ledger.totals()
+        self.assertEqual(totals["live_run"]["calls"], 0)
+        self.assertEqual(totals["live_run"]["cost_usd"], 0.0)
+        self.assertAlmostEqual(totals["historical_cached"]["cost_usd"], Usage(MODEL, 1000, 50).cost())
         self.assertAlmostEqual(Usage(MODEL, 1_000_000, 1_000_000).cost(), 24.0)
 
     def test_missing_credentials_leave_intent_unresolved(self):
@@ -80,6 +88,29 @@ class LlmLayerTest(unittest.TestCase):
         payload = deletion_payload() | {"request_type": "ACCESS"}
         inconsistent = classify(Claude(client=FakeClient(payload), cache_dir=self.tmp.name + "/x"), TEXT)
         self.assertEqual(inconsistent.reason, "inconsistent labels")
+
+    def test_unknown_pricing_is_unknown_not_zero(self):
+        self.assertIsNone(Usage("some-unpriced-model", 10, 10).cost())
+        ledger = Ledger()
+        ledger.record("intent", "live", Usage(MODEL, 1000, 50))
+        ledger.record("intent", "live", Usage("some-unpriced-model", 1000, 50))
+        live = ledger.totals()["live_run"]
+        self.assertEqual((live["calls"], live["unpriced_calls"], live["cost_usd"]), (2, 1, None))
+        self.assertEqual(ledger.totals()["historical_cached"]["cost_usd"], 0.0)  # no cached entries: truly zero
+
+    def test_other_serving_model_is_rejected_but_billed(self):
+        claude = Claude(client=FakeClient(deletion_payload(), model="claude-opus-4-8"), cache_dir=self.tmp.name)
+        intent = classify(claude, TEXT)
+        self.assertEqual(intent.status, "UNRESOLVED")
+        self.assertIn("served by 'claude-opus-4-8'", intent.reason)
+        self.assertEqual(claude.ledger.totals()["live_run"]["calls"], 1)
+        self.assertEqual(list(Path(self.tmp.name).rglob("*.json")), [])  # rejected output is not cached
+
+    def test_truncated_or_invalid_output_is_unresolved(self):
+        truncated = classify(Claude(client=FakeClient(deletion_payload(), stop_reason="max_tokens"),
+                                    cache_dir=self.tmp.name), TEXT)
+        invalid = classify(Claude(client=FakeClient(raw_text="not json"), cache_dir=self.tmp.name), TEXT)
+        self.assertEqual((truncated.status, invalid.status), ("UNRESOLVED", "UNRESOLVED"))
 
     def test_refusal_is_unresolved(self):
         fake = FakeClient(deletion_payload(), stop_reason="refusal")

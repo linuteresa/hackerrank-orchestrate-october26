@@ -8,7 +8,7 @@ A response failing either check is treated as unresolved, never as a decision.
 
 from dataclasses import dataclass
 
-from agent.llm import ModelRefused, ModelUnavailable, digest
+from agent.llm import ModelOutputUnusable, ModelUnavailable, digest
 
 PURPOSE = "intent"
 PROMPT_VERSION = "intent-v1"
@@ -76,8 +76,8 @@ def classify(claude, text):
                                      effort="low", max_tokens=1024)
     except ModelUnavailable as exc:
         return Intent("UNRESOLVED", reason=f"model unavailable: {exc}")
-    except ModelRefused as exc:
-        return Intent("UNRESOLVED", reason=f"model refused: {exc}")
+    except ModelOutputUnusable as exc:  # refusal, other model, truncation, invalid JSON
+        return Intent("UNRESOLVED", reason=f"model output unusable: {exc}")
     problem = validate(output, text)
     if problem:
         return Intent("UNRESOLVED", source=source, reason=problem)

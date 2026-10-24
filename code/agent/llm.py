@@ -2,11 +2,14 @@
 
 * Credentials come only from the environment (``ANTHROPIC_API_KEY`` or any other source the
   Anthropic SDK resolves). Nothing is hardcoded or logged.
-* Every call uses JSON-schema structured output (``output_config.format``) and the server-side
-  refusal fallback (``fallbacks: "default"``). Output is validated again in code by the caller.
+* Every call uses JSON-schema structured output (``output_config.format``) on the approved model
+  only. Automatic model fallback is disabled (Lead Architect decision): a refusal, or a response
+  served by any other model, leaves the decision unresolved. Output is validated again in code.
 * Results are cached under ``code/cache/<purpose>/<sha256>.json`` keyed by model, prompt version
   and input digest, so reruns are deterministic and free. Each cache entry keeps the usage of the
-  call that produced it, so a fully cached run can still report what its outputs cost.
+  call that produced it. The ledger reports *live* cost (calls made in this run) separately from
+  the *historical* cost of reused cache entries; cost for a model without a known price is
+  reported as unknown (``None``), never zero.
 * If no credentials are available, ``call`` raises ``ModelUnavailable`` once and the caller marks
   the affected decision unresolved. No result is ever invented.
 """
@@ -19,7 +22,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MODEL = "claude-opus-5-5"
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
 CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
 
 # USD per million tokens (Anthropic first-party list price for claude-opus-5-5, 2026-10).
@@ -32,7 +34,23 @@ class ModelUnavailable(RuntimeError):
     """No usable credentials / client: the decision that needed the model stays unresolved."""
 
 
-class ModelRefused(RuntimeError):
+class ModelOutputUnusable(RuntimeError):
+    """A billed response that cannot be used; the dependent decision stays unresolved."""
+
+
+class ModelRefused(ModelOutputUnusable):
+    pass
+
+
+class UnexpectedModel(ModelOutputUnusable):
+    """The response was served by a model other than the approved one."""
+
+
+class OutputTruncated(ModelOutputUnusable):
+    pass
+
+
+class InvalidOutput(ModelOutputUnusable):
     pass
 
 
@@ -73,20 +91,38 @@ class Ledger:
     def record(self, purpose, source, usage):
         self.entries.append({"purpose": purpose, "source": source, **usage.__dict__})
 
-    def summary(self):
-        out = {}
-        for entry in self.entries:
-            key = (entry["purpose"], entry["model"], entry["source"])
-            row = out.setdefault(key, {"calls": 0, "input_tokens": 0, "output_tokens": 0,
-                                       "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0,
-                                       "cost_usd": 0.0})
+    @staticmethod
+    def _aggregate(entries):
+        row = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+               "cache_creation_input_tokens": 0, "cost_usd": 0.0, "unpriced_calls": 0}
+        for entry in entries:
             row["calls"] += 1
             for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
                 row[k] += entry[k]
-            usage = Usage(entry["model"], entry["input_tokens"], entry["output_tokens"],
-                          entry["cache_read_input_tokens"], entry["cache_creation_input_tokens"])
-            row["cost_usd"] += usage.cost() or 0.0
-        return [{"purpose": p, "model": m, "source": s, **v} for (p, m, s), v in sorted(out.items())]
+            cost = Usage(entry["model"], entry["input_tokens"], entry["output_tokens"],
+                         entry["cache_read_input_tokens"], entry["cache_creation_input_tokens"]).cost()
+            if cost is None:
+                row["unpriced_calls"] += 1
+            else:
+                row["cost_usd"] += cost
+        if row["unpriced_calls"]:
+            row["cost_usd"] = None  # unknown, never silently zero or partial
+        return row
+
+    def summary(self):
+        """Per (purpose, model, source) rows; ``source`` is ``live`` or ``cache``."""
+        groups = {}
+        for entry in self.entries:
+            groups.setdefault((entry["purpose"], entry["model"], entry["source"]), []).append(entry)
+        return [{"purpose": p, "model": m, "source": s, **self._aggregate(rows)}
+                for (p, m, s), rows in sorted(groups.items())]
+
+    def totals(self):
+        """Live-run cost vs historical cost of the cache entries reused by this run."""
+        return {
+            "live_run": self._aggregate([e for e in self.entries if e["source"] == "live"]),
+            "historical_cached": self._aggregate([e for e in self.entries if e["source"] == "cache"]),
+        }
 
 
 class Claude:
@@ -124,20 +160,27 @@ class Claude:
         except ModelUnavailable as exc:
             self._unavailable_reason = str(exc)
             raise
-        if response.stop_reason == "refusal":
-            raise ModelRefused(str(getattr(response, "stop_details", None)))
-        if response.stop_reason == "max_tokens":
-            raise RuntimeError(f"{purpose}: output truncated at max_tokens")
-        text = next(block.text for block in response.content if block.type == "text")
-        output = json.loads(text)
+        served = getattr(response, "model", None)
         usage = Usage(
-            model=getattr(response, "model", MODEL) or MODEL,
+            model=served or "unknown",
             input_tokens=response.usage.input_tokens or 0,
             output_tokens=response.usage.output_tokens or 0,
             cache_read_input_tokens=getattr(response.usage, "cache_read_input_tokens", 0) or 0,
             cache_creation_input_tokens=getattr(response.usage, "cache_creation_input_tokens", 0) or 0,
         )
+        # Recorded before any rejection below: refused, truncated or off-model responses are still billed.
         self.ledger.record(purpose, "live", usage)
+        if response.stop_reason == "refusal":
+            raise ModelRefused(str(getattr(response, "stop_details", None)))
+        if response.stop_reason == "max_tokens":
+            raise OutputTruncated(f"{purpose}: output truncated at max_tokens")
+        if served != MODEL:
+            raise UnexpectedModel(f"served by {served!r}, approved {MODEL!r}")
+        try:
+            text = next(block.text for block in response.content if block.type == "text")
+            output = json.loads(text)
+        except (StopIteration, json.JSONDecodeError) as exc:
+            raise InvalidOutput(f"{purpose}: no parseable JSON text block") from exc
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({
             "model": usage.model, "purpose": purpose, "prompt_version": prompt_version,
@@ -150,11 +193,9 @@ class Claude:
         import anthropic
 
         try:
-            return self._get_client().beta.messages.create(
+            return self._get_client().messages.create(
                 model=MODEL,
                 max_tokens=max_tokens,
-                betas=[FALLBACK_BETA],
-                fallbacks="default",
                 output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
                 messages=[{"role": "user", "content": content}],
             )
