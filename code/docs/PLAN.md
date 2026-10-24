@@ -1,6 +1,6 @@
 # PLAN — Ghost Data Still Exists deletion-audit agent
 
-Status: **Phase 1 design checkpoint (not approved).** No implementation code exists yet.
+Status: **Phase 1 design checkpoint — revision 2 (2026-10-24).** ADR-002 core accepted; H-2c not approved; awaiting `GO STEP 1`. No implementation code exists yet.
 Owner of decisions: Lead Architect (user). Implementation partner: Claude Code.
 Companion file: `code/docs/DECISIONS.md` (ADRs and measured experiments).
 
@@ -44,142 +44,137 @@ Side branches:
 User-supplied (not yet re-measured): reported statuses 254 COMPLETE / 152 PARTIALLY_COMPLETE /
 112 NOT_STARTED; 10 non-deletion requests; languages EN/FR/ES/PT/JA/KO; no NOT_APPLICABLE in samples.
 
-## 4. Observation model (proposed revision — see ADR-002, pending approval)
+## 4. Observation model (ADR-002 core ACCEPTED 2026-10-24; hypotheses listed separately)
 
-Two record kinds, not one:
+### 4.1 Accepted
 
-### 4.1 `Observation` — something a source positively reported about one physical copy
+- Observations are stored separately per **physical copy**: key `(system_id, resource_id, copy_key)`.
+- `Coverage` records are stored separately from observations.
+- A compliant primary never hides a non-compliant replica: resource-level compliance requires
+  every known copy to be compliant.
+- Provenance is preserved (source file, table, line, snapshot time, raw values).
+- Region / instance / database identity is preserved when the evidence distinguishes copies;
+  role alone is not a sufficient copy identity.
+- Inventory snapshots, record bundles and logical API lookups keep an **unresolved** copy
+  mapping where provenance is unclear.
+- Omission from a snapshot is never stored or reported as ABSENT. Uncertainty is preserved.
 
-| Field | Meaning |
-|---|---|
-| `system_id` | Logical system (`account_service`, `search_service`, …) |
-| `resource_id` | Logical resource (`account_005`) |
-| `copy_id` | Physical copy: `primary`, `failover_replica`, `read_replica`, `reporting_replica`, `replica_eu_west`, `replica_ap_south`, `support_replica`, … or `logical` when the source reports the service's answer without naming a copy |
-| `data_category` | From collection/table/record_type, e.g. `USER_PROFILE` |
-| `presence` | `PRESENT` / `ABSENT` / `UNKNOWN` |
-| `identifiers` | `{email, user_id, email_hash, phone, name}` as observed (null = observed null; missing = not observed) |
-| `attributes` | Category-specific facts: `enabled`, `restore_allowed`, `archive_present`, `retention_until`, `account_status`, `expires_at`, `download_available`, … |
-| `observed_at` | When the source says the state held (row `updated_at`, log line time, `recorded_at`, `observed_at`) |
-| `captured_at` | Evidence capture time from `evidence_files.csv` |
-| `evidence_id` | `file_id` (or `activity_id` / `audit_id` for CSV-derived facts) |
-| `source_kind` | `sql`, `json`, `log`, `text`, `pdf`, `png`, `activity` |
-| `locator` | File path + table/line/JSON pointer for audit and excerpting |
-| `trace_id`, `lookup_keys` | Log provenance |
-| `raw_state` | Original raw fields (e.g. `rows=0 http_status=404`) |
-| `link_strength` | How the identity was attached: `in_record`, `trace_join`, `same_line`, `none` |
-
-Ingestion records *facts*, not treatments. Whether a present record with null identifiers counts as
-`REDACTED` or `ANONYMIZED` is a policy decision made later from `data_category` + rules.
-
-### 4.2 `Coverage` — what a snapshot was able to see
+### 4.2 `Observation` — a positive statement by a source about one copy
 
 | Field | Meaning |
 |---|---|
-| `evidence_id`, `captured_at` | Source snapshot |
-| `system_id`, `copy_id`, `collection` | The physical copy and collection the snapshot enumerates in full |
-| `scope_source` | `snapshot_scope_table`, `topology_header+table_name`, `bundle_collection` |
+| `system_id`, `resource_id` | Logical system and resource |
+| `copy_key` | Physical-copy identity built only from explicit evidence: `{database, role, region, instance}`; unknown parts are `None`. SQL: from the table name (`customer_profiles_failover_replica` → database `customer_profiles`, role `failover_replica`; `customer_data_replica_eu_west` → database `customer_data`, role `replica`, region `eu_west`). Non-copy sources: `{role: "logical"}`, `{role: "inventory"}`, `{role: "records_bundle"}` (unresolved) |
+| `read_path` | Log-only: `pool=…`, `route=…` seen in the same trace (metadata; does not set `copy_key`) |
+| `data_category`, `collection` | From table/collection/record_type |
+| `presence` | `PRESENT` or `ABSENT` — only from explicit statements (row exists; `rows=0`, `404`, `NOT_FOUND`) |
+| `identifiers` | `{email, user_id, email_hash, phone, name}`; observed null kept distinct from not observed |
+| `attributes` | `enabled`, `restore_allowed`, `archive_present`, `retention_until`, `expires_at`, `account_status`, `last_write`, … |
+| `observed_at` | Time at which the source asserts the state held (§5.5). Governs state selection |
+| `last_modified_at` | Row `updated_at` (SQL) — attribute only, never used for ordering |
+| `captured_at` | Manifest capture time of the evidence file |
+| `evidence_id`, `source_kind`, `locator`, `trace_id`, `lookup_keys`, `raw_state`, `link_strength` | Provenance |
 
-Absence of a resource from a covered copy is a provable fact (sample `case_01`: `account_001`
-never appears in any file, yet `VERIFY_RECORD_ABSENT` cites `evidence_54`). Absence is derived
-at query time from `Coverage`, never materialized for every possible resource id.
+### 4.3 `Coverage` — an explicit enumeration declaration (revised; H-2c withdrawn)
 
-Coverage scope rule for generic multi-collection tables (`record_json` tables), hypothesis
-**H-2c**: a file's copies jointly cover the set of `(system_id, collection)` pairs that appear
-in *any* copy table of that file. Example: in `evidence_05` the primary table has zero
-`account_service` rows but the read replica has one, so both copies cover
-`account_service/customer_profiles` and the primary's absence of `account_994` is proven.
-Counter-example it prevents: `evidence_52` (`customer_data_failover_replica_20260920.sql`)
-contains only `security_service` and `identity_service` rows, so it must **not** be read as
-proving every account absent from the failover copy.
+A `Coverage` record exists only where participant-visible evidence declares that a source
+enumerated a collection. Basis grades:
 
-### 4.3 State selection (per physical copy)
+| Basis | Participant-visible declaration | Collection | Copy |
+|---|---|---|---|
+| `C1_DECLARED_COLLECTION` | JSON `snapshots[]` entry `{captured_at, data_store, collection, records}`; single-collection JSON captures `{captured_at, collection, records}` | explicit | unresolved (`records_bundle`) |
+| `C2_TYPED_COPY_TABLE` | SQL table whose schema is one collection and whose name names the copy (`customer_profiles_primary`, `customer_profiles_failover_replica`) | from table | from table name |
+| `C3_SCOPE_TABLE` | SQL `snapshot_scope(origin_system, captured_at)` + typed category tables | from table, system from scope | unresolved (`inventory`) |
+| *(none)* | Generic `record_json` tables; logs; lookup ledgers; service lookup exports; text; PDF | — | — |
 
-For a case with cutoff `audit_at`:
+Every Coverage record carries `filter = "unknown"`: no evidence file declares *how* rows were
+selected, and row counts (3–89 rows vs 850 users) show all snapshots are subject-filtered extracts.
 
-1. Eligible evidence: `captured_at <= audit_at` **and** `observed_at <= audit_at`.
-2. For each `(system_id, resource_id, copy_id)`, the latest eligible fact wins, where a fact is
-   an `Observation` of that copy or a `Coverage` record of that copy (implying ABSENT if the
-   resource is not listed).
-3. A `logical` observation (service API lookup) supersedes only the `logical`/`primary` view. It
-   never clears a replica copy. *Hypothesis H-2b, to be tested.*
-4. Resource-level state is an aggregation over copies: the resource is compliant only if every
-   known copy is compliant. Any non-compliant copy makes the resource non-compliant.
-5. The output still names only `(system_id, resource_id)`; `copy_id` drives the decision and the
-   citation, not the output row.
+Omission from a covered enumeration yields `NOT_LISTED(basis, evidence_id)`, never `ABSENT`.
+Whether a `NOT_LISTED` fact is admissible proof of absence for a given basis is a **Phase 2
+policy decision**, measured against samples (e.g. `case_01` relies on C2, `case_31` on C1).
 
-## 5. Ingestion design (Phase 1 proposal)
+Generic `record_json` tables produce *collection sightings* only (informational, no coverage).
+`evidence_05` still yields `account_994` PRESENT in the read replica, so sample `case_16` does not
+depend on any coverage inference for the primary.
+
+### 4.4 State selection per copy (store behaviour)
+
+For cutoff `audit_at`, for each `(system_id, resource_id, copy_key)`:
+
+1. Eligible facts: `captured_at <= audit_at` and `observed_at <= audit_at` (inclusive).
+2. Facts: explicit observations plus `NOT_LISTED` derived from Coverage of that exact `copy_key`.
+3. The fact with the latest `observed_at` wins. Equal `observed_at` with different states ⇒
+   `CONFLICT` (both retained).
+4. Result per copy: `PRESENT`, `ABSENT`, `NOT_LISTED(basis)`, `UNKNOWN`, or `CONFLICT`, each with
+   the deciding evidence id(s).
+5. The store returns the per-copy vector; it does not collapse it to a resource verdict. Collapse
+   and admissibility rules belong to the Phase 2 policy engine.
+6. A `logical` observation never changes a physical copy's state unless an approved mapping
+   exists (H-2b, unresolved).
+
+## 5. Ingestion design (Phase 1)
 
 ### 5.1 SQL snapshots (24 files)
 
-- Load each file into an in-memory `sqlite3` connection with `executescript` (stdlib; JSON1
-  `json_valid` is available). No regex parsing of SQL.
-- Read header comments `Captured at` and `Database topology`, trailing `snapshot_completed_at`,
-  and the `snapshot_scope` table when present.
-- Table name → `copy_id`: `*_primary` → `primary`; `*_failover_replica`, `*_read_replica`,
-  `*_reporting_replica`, `*_replica_<region>` → that copy. Inventory files (no topology header,
-  per-category tables + `snapshot_scope`) → `copy_id = "inventory"` pending ADR (open question Q2).
-- Each table produces its own `Coverage` row; each row produces its own `Observation`.
-  Different tables never merge, so a failover copy cannot be overwritten by a primary copy.
-- Generic tables (`resource_id, origin_system, collection_name, record_json, updated_at`) are
-  decoded by collection-specific field maps; typed inventory tables map columns directly.
+- Load with stdlib `sqlite3` (`executescript`, in-memory). No regex parsing of SQL.
+- Read header `Captured at` and `Database topology`, trailing `snapshot_completed_at`, and the
+  `snapshot_scope` table; test that they agree with the manifest `captured_at`.
+- Each table → one `copy_key`; each row → one `Observation` with `observed_at` = snapshot time,
+  `last_modified_at` = row `updated_at`. Tables never merge.
+- C2 coverage for typed copy tables; C3 for scope-declared inventory tables; none for generic tables.
 
-### 5.2 Logs (26 files, 6+ dialects)
+### 5.2 Logs (26 files, ≥6 dialects) — strict trace joins (ACCEPTED)
 
-Dialects seen: `key=value`; JSON payload after timestamp; RFC 5424 syslog; bracketed
-`[LEVEL] [service] [trace] event:`; pipe-delimited; cloud-runtime `message="…"` with escaped
-inner key=values; plus line-record logs (`record_lookup seq=…`). One tokenizer per dialect,
-all yielding `LogEvent(file, line_no, ts, service, trace_id, event, fields)`.
-
-Trace grouping and joins:
-
-- Group key is `(evidence_id, trace_id)`; never across files. (Measured: 0 trace ids span files.)
-- Within a group, events are ordered by line number. The lookup identity comes from any of
-  `lookup_key`, `match_key`, `scan_key`, `subject_key`, `correlation_key`, `matched_value`;
-  the resource and outcome come from `*_completed` or terminal events (`message_pii_scan`,
-  `deletion_marker_check`, `analytics_profile_read`, …).
-- A join is accepted only if the group has exactly one lookup identity and exactly one
-  resource id, the started event precedes the completed event, and both share the operation
-  stem (`profile_lookup_started` ↔ `profile_lookup_completed`). Otherwise the group is marked
-  `ambiguous` and produces no identity link (flag for investigator).
-- Incomplete traces (measured across all logs: 514 started+completed, 365 completed-only,
-  87 started-only, 28 neither): completed-only lines keep only same-line identity (e.g.
-  `correlation_key`); started-only traces produce no state observation.
-- Lines without a trace id are self-contained (e.g. `support_replica.log` line for
-  `support_5914 lookup_key=nadia.popescu@yahoo.com`, a look-alike of a sample subject).
-- Lookup keys are typed by pattern: email, `user_NN`, resource id, or hash; email comparison is
-  case-insensitive (`OBI.ADAEZE@ICLOUD.COM`).
-- Connection pools / regions (`pool=search_service_replica`, `region=…`) are metadata, **not**
-  copies, unless the emitting service is itself a copy (`service=support_replica`).
+- Dialects: `key=value`; JSON payload; RFC 5424 syslog; bracketed; pipe-delimited; cloud-runtime
+  `message="…"`; line-record (`record_lookup seq=…`). Each tokenizer yields
+  `LogEvent(file, line_no, ts, service, trace_id, event, fields)`.
+- Group key `(evidence_id, trace_id)`; never across files (measured: 0 ids span files).
+- A join is accepted only when the group has exactly one lookup identity and one resource id, the
+  start precedes the terminal event, and both share the operation stem. Terminal events include
+  `*_completed`, `message_pii_scan`, `deletion_marker_check`, `analytics_profile_read`.
+- Repeated starts in one group, interleaved stems, completed-before-started, or multiple
+  identities/resources ⇒ `ambiguous`, no link, flagged.
+- Completed-only lines keep same-line identity only; started-only traces produce no state.
+- `observed_at` = timestamp of the line carrying the outcome.
+- `pool=` / `route=` are recorded as `read_path`; they do not establish a physical copy (H-2b).
 
 ### 5.3 JSON / text / PDF
 
-- JSON shapes: snapshot bundles (`snapshots[].data_store/collection/records`, each a `Coverage`),
-  service resource exports (`service_exports.<system>.<collection>[]` with per-row
-  `observed_at`, `status_code`), record-lookup ledgers (`records[]` with `recorded_at`,
-  `result`, `subject_reference`), and collection captures (`captured_at`, `records[]`).
-  File names are not trusted for content type (e.g. `connector_configurations_20260812.json`
-  contains generic record lookups).
-- Text handover: pipe-delimited `time | system | resource | category | result | subject` lines.
-- PDF: stdlib-only extraction is not reliable; proposal is `pypdf` (lightweight) or
-  `pdftotext` if available, decided at implementation time and recorded as an ADR.
-- PNG: Phase 3 (Claude vision), not Phase 1.
+- JSON detected by structure, not file name (bundles, service lookup exports, lookup ledgers,
+  single-collection captures).
+- Text handover: pipe-delimited lines; per-line time; emails case-normalized.
+- PDF: **pypdf** (pure Python, cross-platform; `pdftotext` is a system binary, unavailable on
+  stock Windows). Inspected all 4 PDFs: ReportLab-generated, text-extractable. pypdf, pdfminer and
+  pdftotext all yield `submitted 18 Jun 2026 10` / `24 UTC` as separate cells because the PDF
+  content stream itself has no colon (label/value split at `:` by the generator), so the parser
+  must rejoin split `HH`/`MM UTC` times. Final dependency choice is ADR-004 (proposed).
+- PNG: Phase 3.
 
 ### 5.4 Activity, identities, audit log, rules
 
-CSV loaders with typed rows. Activity rows are claims: they become `ActivityClaim` records, not
-`Observation`s, except where the evidence rules explicitly allow (e.g. `LINK_RESOURCE_IDENTITY`
-as an identity link, `CLASSIFY_REQUEST` as a classification claim).
+CSV loaders. Activity rows are `ActivityClaim`s, never observations of state.
 
-### 5.5 Time enforcement
+### 5.5 Timestamp semantics
 
-- One function `eligible(fact, audit_at)` in the store's query layer; every query from
-  identity, investigation, policy and planner goes through it. No module reads raw files later.
-- File-level gate: `captured_at <= audit_at` (contract: never cite evidence captured after
-  `audit_at`). Fact-level gate: `observed_at <= audit_at`.
-- Semantic future timestamps (`retention_until`, `expires_at`) are attributes, not observation
-  times. Measured: every in-file timestamp later than its file's `captured_at` is one of these.
-- Activity: `event_time <= audit_at`.
-- Validator re-checks every cited `evidence_id` against the cutoff before writing output.
+| Source | `observed_at` (governs selection) | Kept as attribute only |
+|---|---|---|
+| SQL row | snapshot time (header / scope `captured_at`) | row `updated_at` → `last_modified_at` |
+| SQL coverage | snapshot time of that table / scope row | — |
+| JSON bundle record & coverage | that snapshot's own `captured_at` (varies inside one bundle, e.g. `evidence_02` holds 09-09, 09-15 and 09-17 snapshots) | — |
+| JSON single-collection capture | top-level `captured_at` | `created_at`, `expires_at` |
+| JSON service lookup export | per-row `observed_at` | `exported_at` = capture |
+| JSON lookup ledger | per-row `recorded_at` | — |
+| Log | timestamp of the outcome line | `last_write`, `retention_until` |
+| Text handover | per-line timestamp | — |
+| PDF | manifest `captured_at` (document as captured) | business dates (`recorded`, `retain until`, `issued`) |
+| Activity claim | `event_time` | — |
+
+Eligibility: `captured_at <= audit_at` **and** `observed_at <= audit_at`, inclusive (samples
+`case_16`/`evidence_05` and `case_11`/`evidence_03` cite evidence captured exactly at `audit_at`).
+Invariant: `observed_at <= captured_at` for every fact (measured: all in-file timestamps later
+than capture are `retention_until`/`expires_at`). One `eligible()` function in the store; the
+validator re-checks every citation.
 
 ## 6. Build roadmap
 
@@ -231,16 +226,61 @@ classifier conflicts with a `CLASSIFY_REQUEST` event.
 - Participant-facing data only.
 - Exact schema, operations, ordering and citation rules from `AGENTS.md` / `problem_statement.md`.
 
-## 10. Open questions (unresolved; do not convert to rules without evidence)
+## 10. Open questions and hypotheses (unresolved; never implemented as rules without evidence)
 
 1. When several files prove the same state, which evidence id is cited?
-2. How are replica disagreement and snapshot scopes represented and evaluated? *(ADR-002 proposal)*
+2. Replica disagreement and snapshot scopes — core resolved by ADR-002; coverage admissibility open.
 3. What is the policy-compliant output when a security audit record is absent?
 4. How are categories absent from the 32 samples handled?
 5. When do downstream dependencies override default operation ordering?
 6. How is vision-only evidence cited and validated?
-7. *(new)* Does a later `logical` lookup (API 404) supersede an earlier replica PRESENT? (H-2b)
-8. *(new)* What `copy_id` do inventory SQL snapshots and JSON bundles represent?
-9. *(new)* Does `expires_at <= audit_at` imply absence of an export, or only that it should be absent?
-10. *(new)* Some resources (e.g. `account_001`) are linked to a subject only through
-    `system_activity` timing near `reported_at`; is that an admissible identity link? (Phase 2)
+7. **H-2b** — when may a logical API lookup (`pool=`, `route=`) update a physical copy?
+8. **H-2c** — WITHDRAWN as a rule (counterexample: `evidence_52` vs `case_03`, see DECISIONS).
+9. **H-2d** — the same table name in different snapshot files denotes the same physical copy
+   (needed for a later snapshot to supersede an earlier one). Unverified.
+10. Which `NOT_LISTED` bases (C1/C2/C3) are admissible proof of absence? (Phase 2, sample-measured)
+11. Does `expires_at <= audit_at` imply an export is gone? (no, unless evidence shows it)
+12. `account_001`-style links that exist only via activity timing near `reported_at` (Phase 2).
+13. Are `customer_accounts_failover_replica` (`evidence_54`) and `customer_data_failover_replica`
+    (`evidence_52`) the same physical failover? Treated as different copies until shown otherwise.
+
+## 11. Phase 1 test plan (ingestion + store only; `code/tests/`, stdlib `unittest`)
+
+Real fixtures unless marked *synthetic*. Synthetic fixtures are only used where the dataset has
+no instance of the behaviour (measured: no resource appears in more than one SQL file; no trace id
+repeats across files).
+
+| ID | Fixture | Assertions |
+|---|---|---|
+| SQL-1 | `evidence_54` | 2 copy keys (`customer_profiles/primary`, `customer_profiles/failover_replica`); 2 C2 coverage at 2026-09-02T23:00:00Z; `account_005` PRESENT only in failover, `observed_at` 23:00:00, `last_modified_at` 22:45:00; state at 2026-09-08T13:40Z: failover PRESENT, primary NOT_LISTED(C2); `account_001` NOT_LISTED in both, never ABSENT; `account_9116` email `m.rios.gil@outlook.com` |
+| SQL-2 | `evidence_05` | `account_994` PRESENT in `customer_data/read_replica`; primary UNKNOWN (generic table ⇒ no coverage); `search_1007` PRESENT in both copies; captured exactly at `case_16` `audit_at` ⇒ eligible |
+| SQL-3 | `evidence_52` | No coverage produced; `audit_record_2016` absent from both tables ⇒ UNKNOWN in both copies (H-2c regression guard) |
+| SQL-4 | `evidence_33` | 3 copy keys with regions (`primary`, `replica/eu_west`, `replica/ap_south`); `account_6539` PRESENT only in `eu_west` |
+| SQL-5 | `evidence_93` | 8 C3 coverage rows (copy `inventory`, unresolved); `backup_4978` `restore_allowed=1`, email `k.appiah88@gmail.com`; `audit_record_1738` `observed_at` 08:37:39, `last_modified_at` 06:06:38 |
+| SQL-6 | `evidence_90` | Only `account_service` in scope; all tables empty ⇒ C3 declared-empty coverage for `account_service`, none for other systems |
+| SQL-7 | all 24 SQL | header `Captured at`, `snapshot_completed_at`, `snapshot_scope` times agree with manifest |
+| JSON-1 | `evidence_51` | 3 C1 coverage; `account_service/customer_profiles` declared empty; `tombstone_9178` identifiers present; `tombstone_440` identifiers observed-null |
+| JSON-2 | `evidence_02` | Each record takes its own snapshot `captured_at` (09-09, 09-15T09, 09-15T12, 09-17), not the file time |
+| JSON-3 | `evidence_92` | `account_5334` 200 ⇒ PRESENT with email only; `account_3136` 404 ⇒ ABSENT; per-row `observed_at`; no coverage |
+| JSON-4 | `evidence_13`, `evidence_36` | Detected as lookup ledgers despite file names; `evidence_36` row `recorded_at` 2026-04-03 ≠ capture 04-09 |
+| JSON-5 | `evidence_59` | `export_001` owner `gabriel.costa@proton.me`; `expires_at` attribute, not `observed_at` |
+| LOG-1 | `evidence_94` | `rb-075713-004` joins `search_4262` ↔ `akosua.gyasi@gmail.com`; `account_2064` ABSENT (`rows=0`); `data_flow_4713` `enabled=false` |
+| LOG-2 | `evidence_61` | `tr-rp-002` joins `support_002` ↔ `nadia.ionescu@yahoo.com`, `marker_found=false`; untraced `support_5914` line keeps only `nadia.popescu@yahoo.com`, no link to the other subject |
+| LOG-3 | `evidence_16` | `tr-4069320` completed-only ⇒ same-line `correlation_key` link; `tr-2053433` start → `message_pii_scan` terminal; `tr-8311761` lookup key typed as resource id; `tr-6555380` uppercase email normalized |
+| LOG-4 | `evidence_06/11/16/21/25/94` | One line per dialect parses to identical `LogEvent` fields |
+| LOG-5 | real started-only trace (one of the 87, chosen at implementation) | Produces no state observation |
+| LOG-6 | `evidence_08` | `account_8473` FOUND at 08-31 and NOT_FOUND at 2026-09-06T07:00:00Z; file captured 09-06T07:00:00Z = `case_86` `audit_at` ⇒ eligible and latest is ABSENT; cutoff 06:59:59 ⇒ whole file ineligible |
+| LOG-7 | real trace with `pool=` + `route=` | Recorded as `read_path`; `copy_key` stays `logical` |
+| LOG-8 | *synthetic* | (a) one trace, two lookup keys ⇒ ambiguous, no link; (b) repeated start/complete pairs interleaved ⇒ ambiguous; (c) completed before started ⇒ no join; (d) same trace id in two files ⇒ never joined; (e) mismatched stems ⇒ no join |
+| TXT-1 | `evidence_03` | Pipe lines parsed; `CHOI.JIHOON94@GMAIL.COM` normalized; `analytics_2034` IDENTIFIABLE; `no direct identifier` ⇒ null |
+| PDF-1 | `evidence_58` | `support_001`, `CS-4827`, `priya.raman@gmail.com`, `+91 98765 73142`; split time rejoined to 2026-06-18T10:24Z |
+| PDF-2 | `evidence_55` | `audit_record_003`, `user_03`, retain-until 2027-08-25T04:03Z as attribute; `observed_at` = manifest capture |
+| PDF-3 | `evidence_27` | 6 register rows (`user_08` … `user_29`), retain-until 2033 |
+| PDF-4 | `evidence_18` | `user_18`, `ingrid.dahl@outlook.com`, order `ORD-20261260` |
+| TIME-1 | `evidence_06` | Lines from 09-10 but captured 09-18 ⇒ ineligible for cutoff 2026-09-15T12:00Z |
+| TIME-2 | *synthetic* (anchored on real `audit_record_1738` timings) | Snapshot at T2 lists row with `updated_at` T0; explicit ABSENT log at T1 (T0<T1<T2) ⇒ copy state at T2 is PRESENT |
+| TIME-3 | all ingested facts | `observed_at <= captured_at` for every fact |
+| STORE-1 | `evidence_54` | Primary NOT_LISTED + failover PRESENT returned as a per-copy vector; never collapsed by the store |
+| STORE-2 | `evidence_52`, `evidence_90` | Partial/empty snapshots yield UNKNOWN / NOT_LISTED, never ABSENT |
+| STORE-3 | *synthetic* | Equal `observed_at`, different states ⇒ CONFLICT with both evidence ids |
+| MAN-1 | `evidence_files.csv` | 94 entries; all paths exist; counts 24/28/26/1/4/11 |
