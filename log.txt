@@ -1,0 +1,452 @@
+## [2026-10-24T13:39:16Z] SESSION START
+
+tool=Claude Code
+model=claude-opus-5-5
+Repo Root: /home/user/hackerrank-orchestrate-october26
+Branch: linu/peaceful-noether-av14w3
+Worktree: main
+Parent Agent: none
+Language: py
+Time Remaining: not configured (unconfirmed planning assumption: ~2026-10-25T08:30 America/New_York, ~18h50m from session start)
+
+## [2026-10-24T13:43:07Z] Session init, plan bootstrap, Phase 1 ingestion design checkpoint
+
+User Prompt (verbatim, secrets redacted):
+You are my Senior AI Systems Engineer and Implementation Partner for the HackerRank Orchestrate October 2026 challenge, Ghost Data Still Exists. [Long briefing: A. session initialization (read AGENTS.md, init log.txt, read problem_statement.md/README.md, create code/docs/PLAN.md and DECISIONS.md if missing, inspect dataset); B. decided architecture (deterministic core, Claude only for intent/vision/bounded investigator, observation model, identity resolution, time semantics, invariants); C. proposed layout; D. 8-phase roadmap; E. six open architecture questions; F. inspect/propose/challenge/await/implement/demonstrate/record protocol; G. Phase 1 design checkpoint only, covering log trace joins, SQL snapshots, temporal correctness, tests, design challenge; H. required response order; then STOP until "GO STEP 1".] Also before that, I want to challenge your observation model before approving implementation. I don't want the latest snapshot across all replicas to automatically win. A resource can be deleted from the primary but still exist in a failover or reporting replica. Explain whether observations should be stored separately by source and snapshot_scope, and whether state selection should happen independently for each physical copy. Show me a concrete example, explain the impact on completeness decisions and evidence citations, and revise your design if appropriate. Do not implement yet. Wait for my approval.
+(Prompt abridged in brackets for length; no secrets present.)
+
+Agent Response Summary:
+Initialized session log, read AGENTS.md/problem_statement.md/README.md, and inspected SQL, log, JSON and text evidence plus all 32 sample answers. Created code/docs/PLAN.md and code/docs/DECISIONS.md. Proposed per-physical-copy observations keyed by (system_id, resource_id, copy_id) plus separate Coverage records for absence-by-omission (ADR-002, PROPOSED), grounded in sample case_05/evidence_54 and case_16/evidence_05 and a drift scan finding 13 replica-only accounts. No parser code written; awaiting approval and "GO STEP 1".
+
+Actions:
+* Appended SESSION START and this entry to log.txt
+* Created code/docs/PLAN.md, code/docs/DECISIONS.md
+* Read-only inspection scripts over dataset/ (sqlite3 in-memory loads, log trace statistics, timestamp-vs-capture checks)
+* get_session (claude-code-remote) to obtain runtime model identifier
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T14:04:42Z] Retry push after GitHub reconnection
+
+User Prompt (verbatim, secrets redacted):
+/install-github-app
+claude is connected to github, try again
+
+Agent Response Summary:
+Retried pushing the two local documentation commits to the designated branch after the user reconnected GitHub; the push succeeded and created the remote branch. No code or design changes were made; still awaiting Phase 1 design approval and "GO STEP 1".
+
+Actions:
+* git push -u origin linu/peaceful-noether-av14w3
+* Appended this entry to log.txt and pushed it
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T14:45:43Z] CORRECTION: verbatim prompt for kickoff entry 2026-10-24T13:43:07Z
+
+Correction note:
+The entry "[2026-10-24T13:43:07Z] Session init, plan bootstrap, Phase 1 ingestion design checkpoint" abridged the user prompt, contrary to AGENTS.md §5.2. That entry is preserved unchanged. The original prompt is still available in this session's context and is reproduced below verbatim (no secrets present; the harness-attached system context that accompanied the message is not part of the user's words and is excluded).
+
+User Prompt (verbatim, secrets redacted):
+You are my Senior AI Systems Engineer and Implementation Partner for the HackerRank Orchestrate October 2026 challenge, Ghost Data Still Exists.
+
+Repository: git@github.com:linuteresa/hackerrank-orchestrate-october26.git
+We are collaborating in one continuous, interactive Claude Code session.
+I am the Lead Architect and final decision-maker. You are responsible for repository inspection, implementation proposals, code, experiments, debugging, testing, and reporting. You must exercise independent engineering judgment and challenge my assumptions when appropriate.
+Do not autonomously build the entire project. We will work through architecture checkpoints, with my explicit approval at each step.
+A. Immediate session initialization
+Follow these steps in order:
+
+1. Read `AGENTS.md` completely. Follow its logging, security, dataset and submission contracts.
+2. Initialize the session log at the repository-root `log.txt` according to `AGENTS.md`. Record `SESSION START`, `tool=Claude Code`, and the exact model identifier obtained from authoritative runtime metadata. Never fabricate a model identifier.
+3. Read `problem_statement.md`, `README.md`, and inspect the current repository structure.
+4. Check whether `code/docs/PLAN.md` and `code/docs/DECISIONS.md` exist. If missing, create them from the architectural handoff below. These documentation files are authorized bootstrap work.
+5. Read the resulting `code/docs/PLAN.md` completely before proposing implementation.
+6. Inspect the participant-facing dataset manifest, sample output format, and relevant input schemas.
+7. Append the required entry for this conversation turn to `log.txt` and verify it by reading it back.
+
+Do not delete, overwrite, or reorganize previous log entries. Do not log secrets or sensitive personal identifiers.
+The challenge began on October 24, 2026. The expected submission deadline is approximately October 25, 2026 at 08:30 America/New_York, but this is not independently confirmed. Treat this as a planning assumption pending confirmation against the challenge email or official instructions.
+B. Architecture already decided
+The central principle is:
+Tested code decides; the model reads, understands, investigates and proposes.
+The system must produce a deterministic, evidence-grounded final answer. Claude is used for tasks requiring language or visual interpretation or uncertain evidence investigation, not for independently choosing final deletion statuses.
+Pipeline
+`dataset/ → ingest/ → normalized observations store → identity resolution → deterministic investigation → optional Claude investigator → policy engine → planner and validator → output.csv`
+Additional branches:
+
+* Claude structured-output intent classifier, cached.
+* Claude screenshot extraction for 11 PNGs, cached and schema validated.
+* Claude investigator agent, invoked only for flagged uncertain cases.
+* Evaluation harness comparing predictions with the 32 supplied sample answers.
+* Final run over all 518 requests, followed by validation and evaluation reports.
+
+Known dataset characteristics
+
+* 518 target requests and 32 labeled samples.
+* Reported statuses: 254 COMPLETE, 152 PARTIALLY_COMPLETE, 112 NOT_STARTED. These are workflow claims, not truth.
+* 10 non-deletion requests among the target requests. The supplied samples contain no NOT_APPLICABLE example.
+* Languages include English, French, Spanish, Portuguese, Japanese and Korean.
+* 94 evidence files: 24 SQL, 28 JSON, 26 logs, 1 text, 4 PDFs and 11 PNG screenshots.
+
+Do not hardcode these counts as classification shortcuts. Recalculate them and use them as sanity checks.
+Observation model
+Normalize evidence into this conceptual structure:
+`(system_id, resource_id, data_category, state, identifiers{email, user_id, email_hash, phone, name}, observed_at, evidence_id)`
+Preserve any additional provenance required for correct auditing, especially:
+
+* `captured_at`
+* source file and evidence type
+* `snapshot_scope`
+* trace identifiers
+* original raw state
+* source-specific metadata
+
+Never discard information needed to distinguish separate replicas, historical observations, or conflicting evidence.
+Identity resolution
+Support:
+
+* Case-insensitive current email matches.
+* Historical emails from `user_audit_log.csv`.
+* Stable `user_id` and subject/customer references.
+* Email hash and phone.
+* Name as a weak identity signal.
+* `LINK_RESOURCE_IDENTITY` activity events.
+* Log `trace_id` joins: an earlier `*_started` record can contain the lookup key while the matching `*_completed` record reveals the resource ID.
+* Look-alike email decoys that must not be incorrectly linked.
+
+All identity claims require grounded evidence. Weak links must not silently become confirmed matches.
+Time semantics
+For a request audited at `audit_at`:
+
+* Never use evidence captured after `audit_at`.
+* Do not treat `reported_status` or activity `reported_result` as authoritative evidence.
+* Reconstruct the applicable resource state from observations available at the cutoff.
+* Preserve replica-specific observations rather than blindly using a globally latest record.
+
+The planning hypothesis is that the latest applicable observation per resource wins. This hypothesis must be tested against the samples, especially where primary, reporting, regional and failover replicas disagree.
+Model usage
+Use Anthropic Claude.
+Application API credentials must come exclusively from `ANTHROPIC_API_KEY` in the runtime environment. Never put keys in code, prompts, logs or commits.
+The model has only three permitted responsibilities:
+
+1. Classify ambiguous deletion intent with structured outputs.
+2. Extract structured facts from screenshots.
+3. Investigate uncertain evidence using a bounded tool-calling loop.
+
+Investigator tools should include:
+
+* `search_observations`
+* `resource_history`
+* `read_evidence_excerpt`
+* `resolve_identity`
+
+Every agent-proposed resource or identity link must be independently checked in code.
+Investigator invocation criteria
+Invoke the investigator only when at least one of these applies:
+
+* Identity is supported only by weak signals.
+* Replica states conflict near the audit time.
+* Activity mentions a resource without matching eligible evidence.
+* Evidence depends on vision extraction.
+* A similar but potentially unrelated identifier exists.
+* The intent classifier conflicts with a relevant classification event.
+
+Non-negotiable policy invariants
+
+* NOT_APPLICABLE produces `steps_json=[]`.
+* Never cite evidence created after `audit_at`.
+* Never delete records that policy requires retaining.
+* Tombstones are redacted, not entirely deleted, when the rules require retaining the stable subject reference.
+* Disable recreation processes and block unsafe restores before dependent record changes.
+* Determine final statuses through tested policy logic, not by asking Claude to choose them.
+* Use only participant-facing challenge data for prediction.
+* Preserve exact output schema, permitted operations, ordering and citation rules from `AGENTS.md` and `problem_statement.md`.
+
+C. Planned implementation structure
+Use the following as the initial proposed layout, subject to my approval:
+
+* `code/main.py` — command-line entry point.
+* `code/ingest/` — SQL, JSON, logs, text, PDF and vision parsers.
+* `code/core/` — typed observations, identity resolution and evidence store.
+* `code/agent/` — intent classifier, investigator, tools and prompts.
+* `code/policy.py` — policy application.
+* `code/planner.py` — deterministic steps and ordering.
+* `code/validate.py` — output contract validation.
+* `code/eval/` — sample comparison and custom cases.
+* `code/evaluation/` — required Markdown evaluation and usage reports.
+* `code/docs/PLAN.md` — architecture, milestones and open questions.
+* `code/docs/DECISIONS.md` — architecture decision records and measured experiments.
+
+Use the repository's existing files and conventions where appropriate. Avoid introducing unnecessary frameworks.
+D. Build roadmap
+Record this roadmap in PLAN.md:
+Phase 1 — Ingestion
+SQL, JSON, structured and unstructured logs, text and PDF parsers; normalized observation store; one test per parser using real supplied evidence.
+Phase 2 — Deterministic baseline
+Identity resolver, evidence investigation, policy engine, planner and serializer. Compare against all 32 supplied samples.
+Phase 3 — Intent and vision
+Cached Claude intent classifier and PNG extraction. Custom non-deletion tests.
+Phase 4 — Evaluation-driven improvement
+Investigate mismatches one at a time. Document each hypothesis, modification, before/after metric and keep/revert decision.
+Phase 5 — Investigator agent
+Bounded Claude tool-calling agent on flagged cases, with code-verifiable identity and evidence links.
+Phase 6 — Full dataset
+Run 518 cases, validate schema and steps, review distribution, flagged cases and adversarial examples.
+Phase 7 — Reporting and reproducibility
+Write evaluation and usage reports; test fresh-run reproducibility, determinism and exact CLI behavior.
+Phase 8 — Packaging
+Package code, output and transcript according to the repository contract; run final checks and prepare technical interview explanations.
+Do not move to the next phase without my explicit authorization.
+E. Architecture questions requiring decisions
+Maintain these as unresolved questions until experiments or evidence answer them:
+
+1. When several files prove the same state, which evidence ID should be cited?
+2. How should replica disagreement and snapshot scopes be represented and evaluated?
+3. What is the policy-compliant output when a security audit record is absent?
+4. How should categories not represented by the 32 samples be handled?
+5. When do downstream dependencies override default operation ordering?
+6. How should vision-only evidence be cited and validated?
+
+Do not silently turn hypotheses into implementation rules.
+F. How we collaborate
+At each phase, use this protocol.
+1. Inspect: Read the relevant repository files and real examples before proposing a design.
+2. Propose: Present your preferred approach, alternatives, trade-offs, complexity, failure modes and test strategy.
+3. Challenge: Actively identify at least one weak assumption or potential design flaw. Do not merely agree with me.
+4. Await decision: Ask me to approve, reject or modify the proposed design. Stop before writing implementation code.
+5. Implement: After explicit approval, implement only the agreed scope.
+6. Demonstrate: Run tests, show actual results, summarize changed files, identify failures and present the next architectural decision.
+7. Record: Update `DECISIONS.md` with my decision, rationale, relevant evidence and measured results. Update `PLAN.md` when approved architecture changes.
+Never interpret silence or a general acknowledgment as permission to proceed to another phase.
+Never claim a test passed unless it was actually executed.
+Keep the code readable, modular, explainable and reproducible. Prefer standard libraries and lightweight dependencies where practical.
+G. Your immediate task — Phase 1 design checkpoint only
+Begin with ingestion design. Do not write parser implementation code yet.
+Inspect one or more representative real evidence files from each supported non-image format.
+Before coding, explain:
+A. Log trace joins
+How will you parse and associate `*_started` and `*_completed` records sharing a `trace_id`?
+How will you avoid wrong joins when trace identifiers repeat or events are incomplete?
+B. SQL snapshots
+How will you parse SQLite-compatible SQL exports and preserve `snapshot_scope`, `updated_at`, resource identity and primary/replica provenance?
+How will you prevent contradictory replicas from overwriting each other?
+C. Temporal correctness
+How will you enforce `captured_at <= audit_at`?
+Where will you enforce the cutoff, and how will you distinguish evidence capture time from an event's own timestamp?
+D. Testing
+What will be the initial parser test cases? Identify the real evidence files you inspected and the expected assertions.
+E. Design challenge
+Identify the weakest assumption in my ingestion architecture. Propose an alternative and explain why I should or should not adopt it.
+H. Required output for this first response
+Once your inspection, documentation bootstrap and logging are complete, respond in this order:
+
+1. Repository findings: What exists, what is missing, and any critical conflicts with the plan.
+2. Session log verification: Confirm the actual new `SESSION START` entry exists and show the recorded tool and exact runtime model identifier.
+3. Plan files: Confirm whether `code/docs/PLAN.md` and `code/docs/DECISIONS.md` were created and summarize their contents.
+4. Phase 1 proposal: Explain log joins, SQL replica handling, time filtering and observation normalization.
+5. Your architectural objection: Challenge at least one of my assumptions with a concrete example.
+6. Proposed tests: State the real evidence fixtures and what each test should prove.
+7. Decision checkpoint: Specify exactly what you need me to approve.
+
+Then STOP.
+Do not start parser implementation.
+I will respond with questions, objections or modifications to your proposal. Incorporate those into the plan, record the architectural decision, and wait for my explicit message:
+`GO STEP 1`
+Only then may you implement and test Phase 1.
+After Phase 1, stop again for my review before proposing implementation of Phase 2.
+Our goal is not merely a functioning solution. It is an evidence-grounded, thoroughly evaluated system whose architecture I can defend in the technical interview.
+
+Also before that, I want to challenge your observation model before approving implementation.
+
+I don't want the latest snapshot across all replicas to automatically win. A resource can be deleted from the primary but still exist in a failover or reporting replica.
+
+Explain whether observations should be stored separately by source and snapshot_scope, and whether state selection should happen independently for each physical copy.
+
+Show me a concrete example, explain the impact on completeness decisions and evidence citations, and revise your design if appropriate.
+
+Do not implement yet. Wait for my approval.
+
+Actions:
+* Appended this correction entry to log.txt (no prior entries modified)
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T14:45:58Z] Phase 1 revision: coverage rule, timestamp semantics, test plan
+
+User Prompt (verbatim, secrets redacted):
+I’ve reviewed your Phase 1 proposal. Here are my architectural decisions and the changes I need before implementation:
+
+1. Per-copy observations — APPROVED
+Store observations separately by (system_id, resource_id, copy_id), with separate Coverage records. A compliant primary must not hide a non-compliant replica.
+
+This approves the core of ADR-002, not every hypothesis bundled into it. Preserve region or instance identity when the evidence distinguishes copies; copy_role alone may be insufficient. Keep inventory and logical-to-physical mappings unresolved where provenance is unclear.
+
+2. H-2c coverage inference — NOT APPROVED YET
+A collection appearing in one copy’s table does not by itself prove that another copy’s export fully covers that collection.
+
+Show what participant-visible evidence establishes coverage for each system, collection, copy and scope. Explain how your rule handles partial exports, filtered snapshots and completely empty collections.
+
+Walk through evidence_05 and evidence_52, then give one counterexample where your current rule would falsely infer ABSENT. Agreement with a sample supports a hypothesis but does not establish that the rule is generally valid.
+
+When coverage cannot be established, preserve uncertainty internally rather than treating omission as proof of deletion.
+
+3. Timestamp semantics — REVISE
+Separate row last-modified time from snapshot observation time. A row updated earlier but present in a later snapshot is evidence of presence at that snapshot.
+
+Explain which timestamp governs state selection for each source type, including Coverage records. Keep evidence capture and applicable observation times within audit_at. Explain how a logical API lookup can affect a physical copy only when that mapping is established; H-2b remains unresolved.
+
+4. Phase 1 validation — SHOW THE PLAN
+Keep the strict trace-join approach. Identify real fixtures and expected assertions for SQL, JSON, logs, text and PDF. Inspect an actual PDF before choosing its extraction dependency.
+
+Include focused tests for:
+- Primary absent while a replica remains present.
+- Partial or empty snapshots with uncertain coverage.
+- A later snapshot containing a row with an older updated_at.
+- Evidence exactly at and after audit_at.
+- Ambiguous, repeated and incomplete trace IDs.
+
+Keep this within Phase 1 ingestion and store behavior; full pipeline evaluation comes later.
+
+5. Documentation and logging — CORRECT
+Update PLAN.md and DECISIONS.md to distinguish accepted decisions from unresolved hypotheses.
+
+The kickoff entry abridged my prompt despite AGENTS.md requiring verbatim logging. Append a correction containing the original prompt if it is available. If unavailable, state that honestly rather than reconstructing it as verbatim. Preserve previous entries and log this feedback in full.
+
+Respond with the revised coverage rule, timestamp semantics, concrete examples, remaining assumptions and final Phase 1 test plan.
+
+Do not write parser implementation code yet. Wait for my explicit GO STEP 1.
+
+Agent Response Summary:
+Recorded ADR-002 core and strict trace joins as accepted; withdrew H-2c after finding a counterexample (evidence_52 omits audit_record_2016, which evidence_94 shows present on 09-26 and sample case_03 requires as VERIFY_RECORD_PRESENT). Revised coverage to explicit enumeration declarations only (C1 bundle collections, C2 typed copy tables, C3 snapshot_scope inventories), with omission stored as NOT_LISTED and never ABSENT. Defined per-source observed_at vs last_modified_at semantics, inspected all 4 PDFs (proposing pypdf), and wrote a 30-test Phase 1 plan. Appended a verbatim correction for the abridged kickoff prompt. No parser code written.
+
+Actions:
+* Inspected 4 PDFs with pypdf, pdfminer, pdftotext and raw content streams
+* Read-only analysis scripts over dataset/ (coverage counterexample search, updated_at vs capture gaps, bundle snapshot times, log pool/route metadata)
+* Rewrote code/docs/PLAN.md §4-5, §10, added §11 test plan; rewrote code/docs/DECISIONS.md (ADR-002..005, hypotheses table, H-2c counterexample)
+* Appended correction entry and this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T15:05:11Z] GO STEP 1: Phase 1 ingestion parsers, store and tests implemented
+
+User Prompt (verbatim, secrets redacted):
+GO STEP 1.
+
+I approve the revised ingestion design:
+- Separate observations per evidenced physical copy.
+- Preserve NOT_LISTED, UNKNOWN and CONFLICT internally.
+- Use snapshot observation time separately from row last_modified_at, with inclusive audit cutoffs.
+- Use pypdf.
+- Implement the proposed 32-test plan.
+
+Make these two corrections in the documentation while implementing:
+
+1. Snapshot size alone does not prove subject filtering. Describe selection/filter scope as unknown unless the evidence explicitly establishes it.
+
+2. The later successful read in evidence_94 does not prove audit_record_2016 existed at the earlier evidence_52 snapshot. Keep the counterexample framed around insufficient coverage evidence and unsupported absence inference, rather than claiming historical presence was established.
+
+Keep H-2b, H-2d and H-COV explicitly unresolved. Ingestion should preserve the facts and provenance needed to evaluate them in Phase 2. NOT_LISTED must not automatically become ABSENT.
+
+Proceed with the agreed Phase 1 parsers, observation/coverage store and tests. Use constructed fixtures where the supplied data lacks the required edge case.
+
+When finished, report:
+- Files changed.
+- Test commands and actual pass/fail counts.
+- Any unsupported formats, dropped records or parsing ambiguities.
+- Remaining assumptions and blockers for Phase 2.
+
+Update PLAN.md, DECISIONS.md and log.txt, then stop for my review before Phase 2.
+
+Agent Response Summary:
+Implemented Phase 1: typed model, per-copy evidence store (inclusive cutoff, NOT_LISTED/UNKNOWN/CONFLICT, strict vs h2d copy identity), and parsers for SQL (sqlite3), six log dialects with strict trace joins, JSON (bundles, captures, lookup exports, ledgers), handover text, PDFs (pypdf with split-time rejoin) and CSV inputs. 62 unittest cases pass covering all 32 plan IDs plus extras; ingestion is deterministic (2,896 observations, 199 coverage records, 572 trace joins, 0 unparsed log lines). Found and flagged two real facts recorded after their file's capture time (evidence_13, evidence_36), correcting an earlier claim; replaced the shared-stem join requirement with an explicit tested start/terminal allow-list. Applied both requested documentation corrections; H-2b, H-2d, H-COV (and new H-TIME) remain unresolved.
+
+Actions:
+* Created code/core/{model,vocab,timeutil,store}.py, code/ingest/{manifest,sql_snapshots,logs,json_records,text_records,pdf_documents,csv_inputs,loader}.py, code/tests/{helpers,test_sql_snapshots,test_json_records,test_logs,test_text_pdf,test_store_time,test_csv_inputs}.py, code/requirements.txt, .gitignore
+* Ran: python3 -m unittest discover -s code/tests -t code  -> Ran 62 tests, OK
+* Updated code/docs/PLAN.md and code/docs/DECISIONS.md
+* Appended this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T15:20:39Z] GO STEP 2: Phase 2 deterministic baseline and sample evaluation
+
+User Prompt (verbatim, secrets redacted):
+Phase 1 accepted. GO STEP 2 under our simplified architecture.
+
+Implement identity resolution, evidence gathering, policy application, step planning, output validation and sample evaluation. Aim for the first end-to-end sample results within 90 minutes. Reuse the existing ingestion code.
+
+My architectural guidance:
+
+1. Identity
+Resolve current and historical identifiers using participant-facing evidence. Require corroboration for name-only documents and timing-only links. Preserve the reason for each resource-to-person link.
+
+2. Missing categories
+Resolve categories from explicit record types, collections and other eligible evidence for the same system/resource. Keep genuinely ambiguous categories unresolved. Missing identifier fields are not proof of redaction or anonymization.
+
+3. Logical reads
+A positive API read can establish that a retained record remains available without identifying its physical replica. An unmapped logical lookup cannot clear a known physical replica.
+
+4. Coverage and copy identity
+Put coverage admissibility and copy matching in small, centralized functions. Use evidence-backed rules, document remaining assumptions and evaluate their consequences against the samples. Avoid building more configuration modes.
+
+5. Timestamp anomalies
+Preserve the flagged rows and existing inclusive capture/observation cutoffs. Do not alter timestamps to make them consistent. Escalate H-TIME only if it affects an actual case decision.
+
+Run predictions independently of sample_output.csv; use sample answers only for evaluation. Do not hardcode case-specific answers.
+
+Report:
+- Status, step, field and exact-sequence accuracy.
+- Mismatched case IDs and concrete failure reasons.
+- Unresolved identity/category counts affecting sample cases.
+- Actual test results.
+
+Proceed with implementation now. Keep the separate investigator agent out of scope. After the baseline, we will prioritize measured failures and add the planned intent and PNG helpers.
+
+Agent Response Summary:
+Implemented the deterministic Phase 2 baseline: identity index (current/historical identifiers, computed email hashes) with reasoned resource links, category resolution, centralized copy_class/coverage_admissible rules, policy engine, planner, contract validator, evaluator and CLI. Sample results: status 0.9375, step precision 0.987 / recall 0.782 / F1 0.873, exact sequence 0.25, 0 contract violations; 518 target rows produced in 1.6s (10 COMPLETE rows with an uncited step, 15 with no steps). Dominant failure is unlinked accounts (20/32 samples, 336/518 targets) whose only connection is workflow activity timing; measured window experiments and a record-time discovery variant (H-DISC) are reported for decision, not adopted. 80 unittest cases pass; predictions never read sample_output.csv.
+
+Actions:
+* Created code/core/identity.py, code/core/categories.py, code/core/resource_state.py, code/policy.py, code/planner.py, code/validate.py, code/audit.py, code/eval/__init__.py, code/eval/evaluate.py, code/tests/test_phase2.py; rewrote code/main.py; edited code/ingest/pdf_documents.py (file/uploader fields)
+* Ran: python3 code/main.py --sample ; python3 code/main.py --output <scratchpad>/target_smoke.csv ; python3 -m unittest discover -s code/tests -t code -> Ran 80 tests, OK
+* Experiments via scratchpad scripts (window linking, batch linking, discovery-time variant)
+* Viewed two PNG screenshots to scope Phase 3 (not used for predictions)
+* Updated code/docs/PLAN.md, code/docs/DECISIONS.md, .gitignore; appended this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=linu/peaceful-noether-av14w3
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
