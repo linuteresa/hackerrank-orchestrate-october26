@@ -102,6 +102,8 @@ def resource_state(store, system_id, resource_id, audit_at):
 # ---- signals ----------------------------------------------------------------------------
 
 DIRECT_KINDS = ("email", "phone", "name", "email_hash")
+FREE_TEXT_FIELDS = ("message_text", "message_excerpt")
+REDACTION_MARKERS = frozenset({"[REDACTED]"})
 
 
 def exposure(obs, include_user_id):
@@ -121,6 +123,10 @@ def exposure(obs, include_user_id):
     if obs.attributes.get("matched_value") or obs.identifier_fields.get("matched_value"):
         return "exposed"
     if observed:
+        return "treated"
+    # A free-text field that explicitly reads as a redaction marker is positive evidence of
+    # treatment when no direct identifier is present anywhere in the record.
+    if any(str(obs.attributes.get(k, "")).strip().upper() in REDACTION_MARKERS for k in FREE_TEXT_FIELDS):
         return "treated"
     return None
 

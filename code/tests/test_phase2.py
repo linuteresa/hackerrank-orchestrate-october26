@@ -105,6 +105,22 @@ class CandidateTest(unittest.TestCase):
         self.assertIn("unresolved:intent", result.export_blockers())  # offline: intent never guessed
 
 
+class EvidenceDiscoveryTest(unittest.TestCase):
+    def test_redaction_marker_is_positive_treatment_evidence(self):
+        from core.resource_state import exposure
+        state = resource_state(store(), "support_platform", "support_2859", ts("2026-08-28T00:00:00Z"))
+        self.assertEqual(state.presence, PRESENT)
+        obs = state.present_observations[0]
+        self.assertEqual(obs.attributes["message_text"], "[REDACTED]")
+        self.assertEqual(exposure(obs, include_user_id=False), "treated")
+        self.assertEqual(exposure(obs, include_user_id=True), "exposed")  # user_id still links it
+
+    def test_available_export_download_check_states_presence(self):
+        # case_372: 'available=true' at 06:55 with the subject's email as correlation key, cutoff 07:00.
+        state = resource_state(store(), "export_service", "export_5081", ts("2026-04-19T07:00:00Z"))
+        self.assertEqual((state.presence, state.evidence_id), (PRESENT, "evidence_34"))
+
+
 class PolicyTest(unittest.TestCase):
     def steps(self, case_id):
         return [(s.phase, s.operation, s.resource_id, s.evidence_id) for s in auditor().audit(samples()[case_id]).steps]

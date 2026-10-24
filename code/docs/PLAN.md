@@ -416,3 +416,8 @@ the sample run reuses those cache entries and reports them under `historical_cac
 of a workflow run is the sum of the `live_run` totals across the smoke, sample and target reports.
 Model-output cache entries (model, purpose, prompt version, input digest, timestamp, usage, output) are
 uploaded for inspection and reproducibility but never committed: `code/cache/` is git-ignored.
+
+Evidence-discovery fixes (2026-10-24, offline, no model output): P3-3 redaction markers and P3-4 export
+availability (see DECISIONS). Target contract violations 10 → 2 (`case_33`, `case_52`: their only export
+evidence postdates the cutoff, correctly unresolved and blocked); samples unchanged (status 0.9375, P 0.987,
+R 0.777, exact 0.25). 96 unittest cases pass. CI run #1: Anthropic API rejected the stored key (0 live calls).

@@ -271,6 +271,10 @@ def _presence(event):
         return ABSENT
     if ledger_presence(result):
         return ledger_presence(result)
+    # A completed download check that reports the export file available states the export exists;
+    # ``available=false`` is left as an attribute (an unavailable file does not prove deletion).
+    if event.event == "export_download_check_completed" and fields.get("available") == "true":
+        return PRESENT
     archive = fields.get("archive_present")
     if archive in ("true", "false"):
         return PRESENT if archive == "true" else ABSENT

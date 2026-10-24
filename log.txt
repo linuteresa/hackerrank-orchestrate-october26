@@ -730,3 +730,25 @@ repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+## [2026-10-24T16:12:11Z] Inspect CI run #1 (key rejected); evidence-discovery fixes P3-3, P3-4
+
+User Prompt (verbatim, secrets redacted):
+(Continuation of the previous user message in the same turn: "After the workflow runs, inspect its reports and cached outputs, report the live sample metrics and remaining target blockers, and continue fixing supported evidence-discovery issues. Keep the audit cutoffs and export gates unchanged. Maintain log.txt.")
+
+Agent Response Summary:
+Inspected the only workflow run (#1, commit efcd923, started by the repository owner): unit tests and the boolean credential check passed, but the Anthropic API rejected the stored secret (AuthenticationError) for both smoke calls, so there were 0 live calls, no cached model outputs and no live metrics; only smoke_report.json was uploaded. Continued with evidence-supported discovery fixes that need no model: explicit "[REDACTED]" free-text with no direct identifiers now proves redaction (6 target COMPLETE rows gain cited verifications), and export_download_check_completed with available=true now states presence (case_372, case_420 gain cited remaining-record findings). Target contract violations fell from 10 to 2 (both correctly unresolved because their evidence postdates the cutoff); sample metrics unchanged; cutoffs and export gates unchanged.
+
+Actions:
+* GitHub: actions_list (audit-run.yml runs), get_job_logs for run 40110065932 / job 120919743481
+* Edited code/core/resource_state.py (redaction marker), code/ingest/logs.py (export availability), code/tests/test_phase2.py (2 tests)
+* Ran: python3 -m unittest discover -s code/tests -t code -> Ran 96 tests, OK; python3 code/main.py --sample --offline; python3 code/main.py --offline (final export refused as designed)
+* Updated code/docs/DECISIONS.md (ADR-014 run #1, P3-3, P3-4) and code/docs/PLAN.md; appended this entry to log.txt
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=main
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+

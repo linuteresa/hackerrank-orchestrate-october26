@@ -150,8 +150,11 @@ evidence and the Lead Architect accept them.
   printed). Local test with fake values found and fixed a bug: a missing `output.csv` made `grep` exit 2
   and masked a real match; the scan now lists only existing files.
 - Verified locally: YAML parses, embedded Python compiles, secret referenced only by name in five steps;
-  smoke script without credentials exits 1 with sanitized reasons and writes no cache. Not yet run on
-  GitHub (requires the Actions secret).
+  smoke script without credentials exits 1 with sanitized reasons and writes no cache.
+- GitHub run #1 (2026-10-24T16:07Z, commit `efcd923`, triggered by the repository owner): unit tests passed;
+  credential check passed (secret present, masked); live smoke test failed with
+  `credentials rejected: AuthenticationError` for both intent and vision - 0 live calls, $0. The API
+  rejected the stored key; no code change can fix this. Sample and target steps were skipped as designed.
 
 ---
 
@@ -207,6 +210,8 @@ affected copies are `UNKNOWN` (regression test SQL-3).
 | P2-4 | Wide request-window linking with exclusion | all deletion-worker targets in `[requested_at, reported_at]` minus resources owned by others | — | 44 right vs 336 wrong candidates | Rejected |
 | P2-5 | Narrow batch window (3 h before `reported_at`) + exclusion, accounts only | experiment only | — | 8 right, 0 wrong, 19 ambiguous, 5 none | Rejected: exclusion is not ownership (decision 2) |
 | P3-1 | Timing-only account link must not be a confirmed link | `_window_account` removed; timing → candidates | R 0.7824 | R 0.7772, P 0.9868 | Keep (decision 2) |
+| P3-3 | An explicit `[REDACTED]` free-text field (no direct identifiers present) proves redaction | `exposure()` returns `treated` on a redaction marker; ANONYMIZE still requires no user id | 6 target COMPLETE rows with uncited REDACTED verifications | cited (e.g. `case_112` support_2859 → evidence_10); samples unchanged | Keep |
+| P3-4 | `export_download_check_completed available=true` states the export exists | presence PRESENT; `available=false` stays attribute-only | export presence unknown in `case_372`, `case_420` | REMAINING record findings citing evidence_34 / evidence_39 | Keep |
 | P3-2 | Unsupported COMPLETE rows must not be exported | export gate | output.csv written unconditionally | samples 32/32, targets 518/518 blocked (intent unresolved without credentials); rows blocked for other reasons: samples 11, targets 129 | Keep |
 
 ## Phase 1 decision record (2026-10-24)
