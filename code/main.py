@@ -114,6 +114,11 @@ def main(argv=None):
     non_deletion = {cid: r.intent.request_type for cid, r in results.items()
                     if getattr(r.intent, "status", None) == "NON_DELETION"}
     print(f"non-deletion intents: {len(non_deletion)}", json.dumps(non_deletion, sort_keys=True))
+    for case_id, reasons in sorted(blockers.items()):
+        unresolved = [f"{k}:{d}" for k, d in results[case_id].unresolved if k not in ("intent", "account_link")]
+        print(f"  blocked {case_id}: {sorted(set(reasons))} {unresolved}")
+    for row in usage["rows"]:
+        print("model usage by purpose:", json.dumps(row, sort_keys=True))
     for label, total in usage["totals"].items():
         cost = "unknown" if total["cost_usd"] is None else f"${total['cost_usd']:.4f}"
         print(f"model usage [{label}]: calls={total['calls']} in={total['input_tokens']} "

@@ -12,6 +12,46 @@ Read [`problem_statement.md`](./problem_statement.md) for the complete challenge
 
 ---
 
+## This Solution: Setup And Run
+
+Deterministic deletion-audit pipeline in Python. Tested code decides every status and step; Claude
+(`claude-opus-5-5`, Anthropic API) is used only to classify request intent and to transcribe the 11
+screenshots, both with JSON-schema output validated in code and cached by input digest.
+
+**Requirements:** Python 3.13 (the tested version, locally and in CI).
+
+```bash
+python3 -m pip install -r code/requirements.txt   # pypdf, anthropic
+export ANTHROPIC_API_KEY=...                       # read from the environment only; never stored
+```
+
+**Run** (from the repository root):
+
+```bash
+python3 code/main.py --sample      # audit + evaluate the 32 labelled samples
+python3 code/main.py               # audit the 518 requests; writes ./output.csv only if every row passes the export gate
+python3 code/main.py --offline     # never call the model; use cached outputs in code/cache/ only
+python3 code/evaluation/custom_cases.py          # participant-created evaluation cases (cached outputs)
+python3 -m unittest discover -s code/tests -t code   # offline unit tests, no credentials needed
+```
+
+Every run writes provisional results and reports to `code/eval/` (`provisional_*.csv`,
+`unresolved_*.json`, `usage_*.json`). The final `output.csv` is written only when no row is blocked by
+the export gate: an unresolved intent or subject, a COMPLETE row without cited proof, or a contract
+violation. Exit code 2 means the export was refused; the reasons are listed in `unresolved_target.json`.
+
+**CI:** the manually triggered GitHub Actions workflow "Deletion audit run"
+(`.github/workflows/audit-run.yml`) runs the unit tests, a live smoke test, the sample and target audits
+and the custom cases, with the key taken from the `ANTHROPIC_API_KEY` repository secret.
+
+**Layout:** `code/ingest/` (one parser per evidence format), `code/core/` (identity, categories,
+per-copy resource state), `code/policy.py` and `code/planner.py` (rules → ordered steps),
+`code/audit.py` (pipeline and export gate), `code/agent/` (model calls, prompts, cache, usage ledger),
+`code/docs/PLAN.md` and `code/docs/DECISIONS.md` (design and decision record),
+`code/evaluation/` (reports and custom cases).
+
+---
+
 ## Quick Start
 
 Clone the repository and move into the project directory:
