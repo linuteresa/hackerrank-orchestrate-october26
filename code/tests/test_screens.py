@@ -23,6 +23,9 @@ def record(resource_id, kind, emails=(), user_ids=(), phones=(), names=(), field
 
 
 SCREENS = {
+    "evidence_04": [record("account_5762", "customer profile", emails=["haruka.s1838@zoho.com"], user_ids=["user_11"],
+                           phones=["+81 90 7610 2507"], names=["Haruka Sato"]),
+                    record("support_9538", "support ticket")],
     "evidence_14": [record("data_flow_1121", "connector", emails=["jain.aditi@gmail.com"],
                            fields=[("Selector", "jain.aditi@gmail.com"), ("Mode", "Continuous"), ("Status", "Healthy"),
                                    ("Sync mode", "Continuous sync")]),
@@ -89,6 +92,16 @@ class ScreenIntegrationTest(unittest.TestCase):
     def test_support_ticket_screen_is_a_support_message(self):
         result, found = steps("case_53")
         self.assertIn(("FINDING", "REPORT_EXPOSED_PII", "support_1034", "evidence_28"), found)
+
+    def test_structured_event_outranks_a_transcribed_screen_kind(self):
+        # support_9538: a log attachment scan (file=...pdf) vs a screen row labelled "support ticket".
+        from core.categories import resolve_category
+        from core.resource_state import resource_state
+
+        result, found = steps("case_34")
+        state = resource_state(auditor().store, "support_platform", "support_9538", targets()["case_34"].audit_at)
+        self.assertEqual(resolve_category("support_9538", state.eligible_observations), ("SUPPORT_ATTACHMENT", "shape"))
+        self.assertIn(("FINDING", "REPORT_REMAINING_RECORD", "support_9538", "evidence_04"), found)  # latest sighting
 
     def test_catalog_alias_joins_the_storage_object_by_exact_file_name(self):
         result, found = steps("case_61")

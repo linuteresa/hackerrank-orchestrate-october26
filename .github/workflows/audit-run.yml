@@ -22,7 +22,7 @@ on:
         type: boolean
         default: true
       dump_cache:
-        description: "Print the cached screenshot extractions to the log (for environments that cannot download artifacts)"
+        description: "Print every model-output cache entry to the log (for environments that cannot download artifacts)"
         type: boolean
         default: false
 
@@ -213,17 +213,17 @@ jobs:
           fi
           echo "Scanned ${#files[@]} files: no credential-like content."
 
-      - name: Print screenshot extractions to the log (opt-in)
+      - name: Print model-output cache entries to the log (opt-in)
         if: inputs.dump_cache && steps.scan.outcome == 'success'
         run: |
-          # Model outputs only (credential-scanned above): one compact JSON line per cached screenshot.
+          # Model outputs and usage metadata only (credential-scanned above); one compact JSON line per
+          # cache file, so environments that cannot download artifacts can rebuild and verify the cache.
           python - <<'PY'
           import json
           from pathlib import Path
-          for path in sorted(Path("code/cache/vision").glob("*.json")):
+          for path in sorted(Path("code/cache").glob("*/*.json")):
               entry = json.loads(path.read_text())
-              keep = {k: entry.get(k) for k in ("prompt_version", "input_digest", "model")}
-              print("VISION", json.dumps(keep | {"output": entry.get("output")}, sort_keys=True, ensure_ascii=False))
+              print("CACHE", f"{path.parent.name}/{path.name}", json.dumps(entry, sort_keys=True, ensure_ascii=False))
           PY
 
       - name: Save model-output cache

@@ -5,7 +5,9 @@ Order of evidence (first unambiguous answer wins):
 1. explicit ``record_type`` / handover category on any eligible observation of the resource;
 2. the collection the resource was observed in (``COLLECTION_CATEGORY``);
 3. the observing event or record shape (``EVENT_CATEGORY``, ``FIELD_CATEGORY``, free-text/file fields);
-4. the resource-id family, only where the family maps to exactly one category in the supplied
+4. a screenshot's transcribed record kind (``SCREEN_KIND_CATEGORY``): free text chosen by the vision
+   step, so it only decides when no structured source does;
+5. the resource-id family, only where the family maps to exactly one category in the supplied
    rules (``UNAMBIGUOUS_FAMILY``). ``analytics_*`` and ``support_*`` are deliberately absent: they
    span several categories (analytics/marketing/telemetry; message/attachment).
 
@@ -95,7 +97,7 @@ def _screen_category(obs):
 
 def _shape_category(obs):
     if obs.source_kind == "png":
-        return _screen_category(obs)
+        return None
     if obs.attributes.get("event") in EVENT_CATEGORY:
         return EVENT_CATEGORY[obs.attributes["event"]]
     if obs.attributes.get("section") in SECTION_CATEGORY:
@@ -117,6 +119,7 @@ def resolve_category(resource_id, observations):
         ("explicit", {o.data_category for o in observations if o.category_source == "explicit" and o.data_category}),
         ("collection", {COLLECTION_CATEGORY[o.collection] for o in observations if o.collection in COLLECTION_CATEGORY}),
         ("shape", {c for c in (_shape_category(o) for o in observations) if c}),
+        ("screen", {c for c in (_screen_category(o) for o in observations if o.source_kind == "png") if c}),
     ]
     for reason, found in levels:
         if len(found) == 1:
